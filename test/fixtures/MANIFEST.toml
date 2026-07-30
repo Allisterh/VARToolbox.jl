@@ -1,0 +1,18 @@
+# Golden-master fixture manifest -- GENERATED, do not hand-edit.
+# Regenerate with: julia --project=test test/fixtures/update_manifest.jl
+#
+# Fixtures are committed alongside their generators so that the test
+# suite runs without a MATLAB licence. These hashes make drift between
+# a generator and its committed output detectable.
+
+[meta]
+updated = "2026-07-31"
+matlab = "R2026a Update 3 (26.1.0.3276743)"
+source_commit = "7695feb9c72812e6f6f08c1288ccc8b927af0aa7"
+
+[fixtures.phase1]
+file = "phase1.mat"
+generator = "gen/gen_phase1.m"
+sha256 = "9f003e3e23732511f48c837d9fb930c8e5bf6bd3224f9e04b48c58b91f87d532"
+bytes = 12049
+
