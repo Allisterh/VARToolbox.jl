@@ -49,6 +49,9 @@ include("ardl.jl")
 include("identification.jl")
 include("signrestrictions.jl")
 
+# ---- Phase 4: error bands --------------------------------------------
+include("bands.jl")
+
 # Auxiliary
 export tdis_prb, tdis_inv, fdis_prb, beta_pdf, beta_inv
 export nanmean, nansum, nanstd, nanvar, nansem, nanmedian, nanmax, nanmin
@@ -66,6 +69,9 @@ export ARDLmodel, ARDLModel
 # Identification
 export VARir, VARvd, VARhd, HDOutput
 export SR, SROutput, SignRestrictions, VARdrawpost, DrawSource
+
+# Error bands
+export VARirband, VARvdband
 
 # Re-exported so `@set VARopt.nsteps = 40` works without an extra `using`.
 export @set

@@ -336,3 +336,57 @@ sign restrictions on the remaining shocks, and the only consumer of the
 it is a real gap. Everything it depends on (`ident = "iv"`, `sigma_b`,
 `Biv`, and the square-`SIGN` path through the same loop) is validated;
 what is untested is the orthogonal-completion step itself.
+
+---
+
+## Phase 4 — error bands
+
+**Validated against:** `VARirband` (standard and wild bootstrap; `short` and
+`long` identification; `pctg = 95` and `68`; with an exogenous variable;
+and the `iv` + `wild` branch) and `VARvdband` (standard and wild).
+
+**Tolerance:** `rtol = 1e-10`, except the Gertler-Karadi IV block at `1e-6`
+for the conditioning reason given in Phase 3. **Result:** 830 / 830 tests
+pass.
+
+### M2, second application: bands are exact, not distributional
+
+The brief proposed validating bootstrap bands by comparing summary
+statistics over ~10,000 draws at 1–2% relative tolerance. That tolerance is
+*wider than the `prctile` defect M1 identifies* — it would have passed a
+build in which every band was computed from the wrong quantile definition.
+
+Instead, `gen/shim/VARirband.m` and `gen/shim/VARvdband.m` route their
+`rand(` call sites through a recording wrapper (3 and 2 sites respectively;
+`diff` confirms only those lines change) and the recorded uniforms are
+replayed in Julia through a `DrawSource`. Every band is therefore compared
+elementwise at `rtol = 1e-10`, over `INF`, `SUP`, `MED` and `BAR`.
+
+`DrawSource` tracks normal and uniform pools separately, so a pool recorded
+from `randn` can never be consumed by a `rand` call site. Exhausting an
+injected pool raises rather than falling back to sampling — a golden-master
+test that quietly stopped being one would be worse than no test.
+
+### Behaviour preserved
+
+- **`VARirband` has an `iv` wild-bootstrap branch; `VARvdband` does not.**
+  With `method = "wild"`, `VARirband` checks `ident == "iv"` and resamples
+  the instrument alongside the residuals
+  (`Z = [IV(1:nlag,:); IV(nlag+1:end,:).*rr]`); `VARvdband` always takes the
+  plain `rand(nobs,1)` path. Replicated. It rarely bites in practice
+  because `VARvd` refuses `ident = "iv"` outright, but it does mean the two
+  functions consume different numbers of draws for the same options — which
+  matters precisely when injecting recorded draws.
+- **Draws with `maxEig >= 0.9999` are discarded and redrawn**, so `ndraws`
+  counts accepted replications rather than attempts, and there is no cap on
+  attempts. An explosive point estimate loops indefinitely. Upstream.
+- **`VARvdband.m` hardcodes its progress interval as `10*ww`** instead of
+  reading `VARopt.mult` as `VARirband.m` does. Not reproduced — this port
+  prints no progress at all — and noted only because it is a real
+  inconsistency between two otherwise near-identical functions.
+- Bands use `_prctile` (M1), so they inherit MATLAB's Hazen/type-5
+  definition rather than Julia's default.
+
+**Not checked:** the rejection path itself (no fixture drives a draw to
+`maxEig >= 0.9999`, so the resample-and-retry branch is exercised only
+incidentally); `VARvdband` with an exogenous variable.

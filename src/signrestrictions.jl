@@ -31,9 +31,11 @@ mutable struct DrawSource
     rng::AbstractRNG
     normals::Union{Nothing,Vector{<:AbstractArray}}
     i::Int
+    uniforms::Union{Nothing,Vector{<:AbstractArray}}
+    j::Int
 end
-DrawSource(; rng::AbstractRNG = Random.default_rng(), normals = nothing) =
-    DrawSource(rng, normals, 0)
+DrawSource(; rng::AbstractRNG = Random.default_rng(), normals = nothing,
+           uniforms = nothing) = DrawSource(rng, normals, 0, uniforms, 0)
 
 function next_normal!(s::DrawSource, dims::Integer...)
     if s.normals === nothing

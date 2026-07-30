@@ -1,10 +1,10 @@
 % ==== FIXTURE SHIM -- do not use outside fixture generation ====
-% Byte-identical to v3dot1/VAR/SignRestrictions.m except that its two
-% randn() call sites are routed through vartb_recrandn(), which records
-% each draw so the identical sequence can be replayed in Julia (M2).
-% Nothing else is changed: the algorithm, the branch structure and the
-% acceptance logic are untouched.
-% Regenerate with test/fixtures/gen/shim/make_shim.py if upstream changes.
+% Byte-identical to v3dot1/VAR/SignRestrictions.m except that its 2
+% random-number call sites are routed through a recording wrapper, so
+% the exact draw sequence can be replayed in Julia (M2). Nothing else
+% is changed: algorithm, branch structure and acceptance logic are
+% untouched.
+% Regenerate with test/fixtures/gen/shim/make_shim.py.
 function B = SignRestrictions(SIGN,VAR,VARopt)
 % =======================================================================
 % Draws orthonormal rotations of the VAR covariance matrix until 
