@@ -45,6 +45,10 @@ include("ols.jl")
 include("var.jl")
 include("ardl.jl")
 
+# ---- Phase 3: identification ------------------------------------------
+include("identification.jl")
+include("signrestrictions.jl")
+
 # Auxiliary
 export tdis_prb, tdis_inv, fdis_prb, beta_pdf, beta_inv
 export nanmean, nansum, nanstd, nanvar, nansem, nanmedian, nanmax, nanmin
@@ -58,6 +62,10 @@ export VARmakelags, VARmakexy
 export OLSmodel, OLSOutput
 export VARmodel, VARoption, VARModel, VAROptions, EquationResult
 export ARDLmodel, ARDLModel
+
+# Identification
+export VARir, VARvd, VARhd, HDOutput
+export SR, SROutput, SignRestrictions, VARdrawpost, DrawSource
 
 # Re-exported so `@set VARopt.nsteps = 40` works without an extra `using`.
 export @set

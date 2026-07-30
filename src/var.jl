@@ -203,6 +203,10 @@ Base.@kwdef struct VARModel
     PSI::Array{Float64,3} = zeros(0, 0, 0)
     Fp::Array{Float64,3} = zeros(0, 0, 0)
     IV::Matrix{Float64} = zeros(0, 0)
+    # Populated only by `ident = "iv"`, mirroring the extra fields VARir.m
+    # attaches to VAR in that branch.
+    FirstStage::Union{Nothing,OLSOutput} = nothing
+    sigma_b::Matrix{Float64} = zeros(0, 0)
 end
 
 # -----------------------------------------------------------------------

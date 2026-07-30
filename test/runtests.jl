@@ -3,6 +3,8 @@ using VARToolbox
 using LinearAlgebra
 using MAT
 using SHA
+using Random
+using Statistics
 
 const FIXDIR = joinpath(@__DIR__, "fixtures")
 
@@ -107,4 +109,5 @@ end
 
     include("test_phase1.jl")
     include("test_phase2.jl")
+    include("test_phase3.jl")
 end

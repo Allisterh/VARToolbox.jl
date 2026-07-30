@@ -216,3 +216,123 @@ Note for whoever picks up `Stats/`: `SummStats.m` calls `skewness` and
 `kurtosis`, which **are** Statistics Toolbox functions. That is an
 additional toolbox dependency beyond the six `prctile`/`norminv` sites
 catalogued in the brief.
+
+---
+
+## Phase 3 — identification and IR/VD/HD
+
+**Validated against:** `VARir` (all five `ident` schemes, plus `recurs`,
+`impact` and `shut` variants), `VARvd`, `VARhd` (including the exogenous
+branch), `SignRestrictions` (`sr_hor = 1` and `sr_hor = 4`), `SR` end to
+end, `VARdrawpost`.
+
+**Tolerance:** `rtol = 1e-10`, except the Gertler-Karadi IV block at `1e-6`
+(justified below). **Result:** 740 / 740 tests pass.
+
+### M2 realised — sign restrictions validated exactly, not distributionally
+
+The brief's plan was to compare bootstrap and rotation output
+distributionally at 1–2%. Instead, `gen/shim/SignRestrictions.m` — a copy of
+the upstream file whose **only** change is routing its two `randn(` call
+sites through a recording wrapper (`diff` confirms two lines) — saves the
+exact draw sequence MATLAB consumed. The Julia side replays it through a
+`DrawSource`.
+
+Consequence: `SignRestrictions` and the whole of `SR` (with `sr_mod = 0`,
+which removes the only other stochastic step) are **exact golden-master
+checks at `rtol = 1e-10`**, covering `Ball`, `IRall`, `VDall`, the median
+and percentile bands, and the historical decompositions. A test also asserts
+the Julia run consumed exactly as many draws as MATLAB did, which confirms
+both implementations accepted and rejected the same rotations.
+
+`gen/shim/make_shim.py` regenerates the shim in byte mode, preserving the
+upstream CRLF line endings so the two-line diff stays auditable.
+
+### Layout finding: IR and VD are indexed differently
+
+`CLAUDE.md` states that `IR` is `(nsteps × nvar × nshocks)` and that "`VD`
+matches". **It does not.** Verified numerically:
+
+- `IR[step, variable, shock]` — `IR[1, :, 1]` equals column 1 of `B`.
+- `VD[step, shock, variable]` — `sum(VD[h, :, k]) == 100` for every horizon
+  and variable, while summing over the third index gives 120.9 and 46.7.
+
+`HD.shock` follows `VD`'s convention, not `IR`'s. All three are pinned by
+test and documented with admonitions on the respective functions.
+
+### Upstream defect: `SR` returns `IR`/`VD`/`HD` from the wrong draw
+
+`SR.m` files each draw's model under a label built from `jj` **before** `jj`
+is incremented, so accepted draw `k` is stored as `"draw(k-1)"`. At the end
+it selects `sel` — the accepted draw whose `B` is closest to the median —
+and reads back `VAR_draw.("draw" + sel)`, which is draw `sel+1`.
+
+Verified on Stock-Watson data with `sr_mod = 0` (so all draws share one
+model and the mapping is unambiguous): **`SRout.B` was accepted draw 24
+while `SRout.IR` matched accepted draw 25 to 0.0e+00.** So the impulse
+responses, variance decomposition and historical decomposition that `SR`
+returns as its point estimate do not correspond to the `B` it returns
+alongside them.
+
+There is also a latent crash: when `sel == ndraws`, the label
+`"draw(ndraws)"` was never created and MATLAB errors on a non-existent
+field. Probability roughly `1/ndraws` per call.
+
+Replicated by default so golden-master comparison stays meaningful, with
+`fix_draw_index = true` available to use the draw that actually corresponds
+to `B` (and which also removes the crash). Both behaviours are pinned by
+test. The `med`/`inf`/`sup` bands are computed across all draws and are
+unaffected.
+
+### Bug found in this port by the fixtures
+
+`_wold` initially allocated `Fp` with `nlag` slices, mirroring MATLAB's
+`zeros(nvar,nvar,nlag)` preallocation. But MATLAB's else-branch assigns
+`Fp(:,:,ii) = zeros(nvar,nvar)` for `ii > nlag`, which **grows** the array
+to `nsteps`, and the Wold recursion indexes up to `nsteps-1`. Allocating
+`max(nlag, nsteps)` fixed it. Caught immediately by the golden-master
+comparison of `VAR.Fp`.
+
+### Tolerance justification — the IV block
+
+The Gertler-Karadi specification is 12 lags of 4 variables plus a constant:
+49 coefficients on 384 observations of persistent macro series. `cond(X)` is
+about 4.7e4, so `cond(X'X)` is about 2.2e9 and solving through the normal
+equations admits relative error of order `cond(X'X)·eps ≈ 5e-7` in any
+implementation.
+
+Measured difference against MATLAB is **6.5e-8 norm-relative** (3.1e-6
+absolute on coefficients up to 32.1) — an order of magnitude inside that
+bound. Both results are equally valid solutions of the same ill-conditioned
+system, so this block runs at `rtol = 1e-6`. The test asserts
+`cond(X'X) > 1e8` alongside, so the justification is self-checking: if the
+design ever becomes well conditioned the loosened tolerance stops being
+warranted.
+
+Note this conditioning is inherent to what the toolbox does, not to the
+fixture: `GO_GK2015.m` uses exactly this specification.
+
+### Other findings
+
+- **`GO_GK2015.m` applies `Num2NaN` before selecting columns.** The sheet
+  encodes missing values as the sentinel `123456789` and the `ff4_tc`
+  instrument is only populated over part of the sample. A first draft of the
+  generator skipped this and produced an IV first stage with
+  `RCOND ~ 1.5e-16`. Worth flagging for anyone writing new example scripts.
+- **`VARhd`'s exogenous contribution ignores lags of the exogenous
+  variables.** It uses only `F[:, nvar*nlag+const+ii]`, the contemporaneous
+  coefficient. With `nlag_ex > 0` the lagged exogenous coefficients are
+  silently omitted, so `HD.endo` does not reconstruct the data exactly.
+  Replicated and documented.
+- **`SignRestrictions` returns `nothing` on rotation-budget exhaustion and
+  does not raise** — its error path is commented out upstream. Pinned by a
+  test using deliberately impossible restrictions. `SR`'s separate
+  `sr_draw` budget is the layer that does raise.
+
+**Not checked:** the `whereToStart > 1` branch of `SignRestrictions` — the
+path that combines an instrument-identified first column (`VAR.Biv`) with
+sign restrictions on the remaining shocks, and the only consumer of the
+`randn(dy,1)` draw site. The brief calls this combination out explicitly, so
+it is a real gap. Everything it depends on (`ident = "iv"`, `sigma_b`,
+`Biv`, and the square-`SIGN` path through the same loop) is validated;
+what is untested is the orthogonal-completion step itself.
