@@ -42,6 +42,8 @@ include("utils.jl")
 
 # ---- Phase 2: estimation ----------------------------------------------
 include("ols.jl")
+include("var.jl")
+include("ardl.jl")
 
 # Auxiliary
 export tdis_prb, tdis_inv, fdis_prb, beta_pdf, beta_inv
@@ -54,6 +56,8 @@ export VARmakelags, VARmakexy
 
 # Estimation
 export OLSmodel, OLSOutput
+export VARmodel, VARoption, VARModel, VAROptions, EquationResult
+export ARDLmodel, ARDLModel
 
 # Re-exported so `@set VARopt.nsteps = 40` works without an extra `using`.
 export @set
