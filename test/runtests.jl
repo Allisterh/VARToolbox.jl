@@ -5,6 +5,7 @@ using MAT
 using SHA
 using Random
 using Statistics
+using Distributions
 
 const FIXDIR = joinpath(@__DIR__, "fixtures")
 
@@ -111,4 +112,5 @@ end
     include("test_phase2.jl")
     include("test_phase3.jl")
     include("test_phase4.jl")
+    include("test_phase5.jl")
 end

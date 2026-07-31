@@ -390,3 +390,80 @@ test that quietly stopped being one would be worse than no test.
 **Not checked:** the rejection path itself (no fixture drives a draw to
 `maxEig >= 0.9999`, so the resample-and-retry branch is exercised only
 incidentally); `VARvdband` with an exogenous variable.
+
+---
+
+## Phase 5 — local projections
+
+**Validated against:** `LPoption`, `LPmakex`, `LPmodel` (with lags, unit
+shock, without lags, with exogenous regressors, and at `pctg = 68`).
+
+**Tolerance:** `rtol = 1e-10`. No RNG is involved. **Result:** 1050 / 1050
+tests pass.
+
+Kept as the independent API it is upstream: its own options struct, its own
+result type, no interaction with `VARir`/`VARvd`/`VARhd`.
+
+### The 17th `eval` site
+
+`LPmodel.m:132` builds `LPout.h1`, `LPout.h2`, … one horizon at a time. This
+is the only `eval` site that is *not* the per-equation pattern, and it is
+now `LPOutput.h::Vector{HorizonResult}`, indexed `LPout.h[hh]`. **All 17
+`eval` sites in the toolbox are now eliminated.**
+
+### Upstream defects found
+
+1. **`LPoption.m` does not define `nlag` or `const`, but `LPmodel.m` reads
+   both on its 8th and 9th lines.** Calling `LPmodel` with an unmodified
+   options struct fails in MATLAB with a bare "Reference to non-existent
+   field 'nlag'". The file's own guards (`if ~exist('nlag','var')`,
+   `if ~exist('const','var')`) are dead code — the variables were assigned
+   from `LPopt` two lines earlier, so they can never fire.
+
+   **Deviation:** this port declares both fields. `nlag` defaults to
+   `nothing` and raises an `ArgumentError` naming the problem, preserving
+   the contract that it is mandatory while replacing an obscure
+   field-access failure with an actionable message. Pinned by a test that
+   also asserts the MATLAB struct genuinely lacks the fields.
+
+2. **`bstd_HW` is assigned twice and holds Newey-West values.**
+
+   ```matlab
+   LPout.(aux{1}).bstd_HW = OLSout.bstd_HW;
+   LPout.(aux{1}).bstd_HW = OLSout.bstd_NW;   % overwrites the previous line
+   ```
+
+   So the field named for White standard errors carries Newey-West ones,
+   and the White values are lost. Replicated — `HorizonResult.bstd_HW`
+   matches MATLAB — with the discarded value also exposed as
+   `bstd_White`. Tests pin that the stored field equals `bstd_NW`, that
+   `bstd_White` equals `bstd_HW`, and that the two genuinely differ.
+
+3. **The bands do not use the field the model stores.** `INF`/`SUP` are
+   computed from `OLSout.bstd_HW` — the *White* errors — while the stored
+   `bstd_HW` field holds Newey-West. So the reported bands cannot be
+   reconstructed from the reported standard errors. Pinned by test.
+
+4. **`EXOG` and `LAGS` row-count checks are unreachable.** Both are nested
+   inside `if nobsS ~= nobsENDO` and placed *after* its `error(...)` call.
+   **Deviation:** this port checks all three dimensions properly. This
+   cannot change the result of any input MATLAB accepts — it only rejects
+   inputs MATLAB would have silently mis-handled.
+
+### Behaviour worth knowing
+
+- **With `LAGS` empty the projection has no intercept at all**, regardless
+  of `const_`. The regression is run as `OLSmodel(Y, X, 0)` and the constant
+  enters only through `VARmakexy(LAGS, nlag, const_)`. Pinned by a test
+  showing `const_ = 0` and `const_ = 1` give identical results in that case.
+- **Bands are asymptotic Normal, not bootstrapped**, and carry no correction
+  for the serial correlation that overlapping horizons induce by
+  construction. They are therefore anti-conservative at longer horizons.
+  Upstream's choice; documented on `LPmodel` so a user does not mistake
+  them for the bootstrap bands `VARirband` produces.
+- `LPmodel` projects only `ENDO`'s **first column**.
+- `zscore` (used for `impact = 0`) and `norminv` are Statistics Toolbox
+  functions — two more toolbox dependencies beyond those catalogued in the
+  brief. Mapped to `(s .- mean(s)) ./ std(s)` and `quantile(Normal(), ·)`.
+
+**Not checked:** `LPmodel` with multi-column `S`.

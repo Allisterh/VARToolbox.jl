@@ -52,6 +52,9 @@ include("signrestrictions.jl")
 # ---- Phase 4: error bands --------------------------------------------
 include("bands.jl")
 
+# ---- Phase 5: local projections ---------------------------------------
+include("lp.jl")
+
 # Auxiliary
 export tdis_prb, tdis_inv, fdis_prb, beta_pdf, beta_inv
 export nanmean, nansum, nanstd, nanvar, nansem, nanmedian, nanmax, nanmin
@@ -72,6 +75,9 @@ export SR, SROutput, SignRestrictions, VARdrawpost, DrawSource
 
 # Error bands
 export VARirband, VARvdband
+
+# Local projections (independent API)
+export LPmodel, LPoption, LPmakex, LPOptions, LPOutput, HorizonResult
 
 # Re-exported so `@set VARopt.nsteps = 40` works without an extra `using`.
 export @set
