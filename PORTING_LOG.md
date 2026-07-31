@@ -467,3 +467,71 @@ now `LPOutput.h::Vector{HorizonResult}`, indexed `LPout.h[hh]`. **All 17
   brief. Mapped to `(s .- mean(s)) ./ std(s)` and `quantile(Normal(), ·)`.
 
 **Not checked:** `LPmodel` with multi-column `S`.
+
+---
+
+## Phase 6 — end-to-end replication
+
+**Validated against:** all four published replications, reproduced as Julia
+functions in `examples/replications.jl` reading the **same** `.xlsx`
+fixtures as the MATLAB scripts.
+
+| replication | identification | spec | result |
+|---|---|---|---|
+| Stock & Watson (2001, JEP) | recursive | 3 vars, 4 lags, 24 steps, 1000 bootstrap draws | exact, `rtol = 1e-10` |
+| Blanchard & Quah (1989, AER) | long-run | 2 vars, 8 lags, 40 steps, 1000 draws | exact, `rtol = 1e-10` |
+| Gertler & Karadi (2015, AEJ) | external instrument + recursive | 4 vars, 12 lags, 48 steps, 200 wild draws | `rtol = 1e-6` (conditioning) |
+| Uhlig (2005, JME) | sign restrictions | 6 vars, 12 lags, 60 steps, 100 draws, `sr_mod = 1` | exact, `rtol = 1e-10` |
+
+**Result:** 1524 / 1524 tests pass across all phases.
+
+### Comparison by number, not by eye
+
+The brief asked for figures compared "by eye and by number". Comparison by
+eye is not evidence, so every replication is asserted elementwise against
+MATLAB output — **including the bootstrap bands and the sign-restriction
+draws**, which are exact rather than distributional because the draw
+sequences are recorded and replayed (M2).
+
+Uhlig runs with `sr_mod = 1`, so each draw also redraws `(sigma, F)` from
+the posterior through `wishrnd`/`mvnrnd` — streams that cannot be
+reproduced across languages under any seeding. A fourth shim appends three
+lines to `VARdrawpost.m` that record the draw it produced; injecting those
+alongside the rotation draws makes even the sign-restriction replication an
+exact comparison.
+
+### Beyond agreement: the replications are checked for economic content
+
+Numerical agreement with MATLAB proves the port faithful, not that either is
+correct. Each replication therefore also asserts its identifying content:
+
+- **Stock-Watson**: the recursive ordering binds — a funds-rate shock moves
+  neither unemployment nor inflation on impact; every row of Table 1.B sums
+  to 100.
+- **Blanchard-Quah**: the identifying restriction binds — the cumulated GDP
+  response to the demand shock dies out (below 2% of its own peak at horizon
+  40) while the supply shock's does not (above 50% of peak).
+- **Gertler-Karadi**: the instrument does real work — IV and recursive
+  responses differ by more than 1%; `B` has only its first column filled.
+- **Uhlig**: every accepted draw satisfies the imposed sign pattern, and the
+  median impact responses move as monetary policy should (prices, commodity
+  prices and nonborrowed reserves down; funds rate up).
+
+### Data loading
+
+`load_replication_data` reads the sheets with `XLSX.jl` and is asserted to
+match `xlsread` elementwise. `XLSX` is a **test/example dependency only** —
+`VARToolbox` itself does no file I/O and does not depend on it.
+
+The `Num2NaN` sentinel conversion is applied on load. This is not cosmetic:
+the Gertler-Karadi instrument is populated over only part of the sample, and
+leaving `123456789` in place makes its first-stage regression singular
+(`RCOND ~ 1.5e-16`).
+
+### Deviation
+
+Uhlig runs at `ndraws = 100` rather than the script's 500, purely to keep
+the recorded posterior draws (a 73×6 coefficient matrix per draw) to a
+reasonable fixture size. Both languages use the reduced count, so the
+comparison is unaffected; only the width of the reported bands differs from
+the published figure.

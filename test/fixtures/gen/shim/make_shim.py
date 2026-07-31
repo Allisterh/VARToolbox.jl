@@ -53,3 +53,28 @@ for name, token, repl, expected in JOBS:
     header = TEMPLATE % (name.encode(), expected)
     (HERE / name).write_bytes(header + out)
     print(f"wrote {HERE / name} ({n} sites routed)")
+
+# VARdrawpost is different in kind: its randomness comes from wishrnd and
+# mvnrnd, whose streams cannot be reproduced across languages at all. So
+# rather than routing a call site, we append three lines that RECORD the
+# draw it produced. The computation itself is untouched.
+POST_HEADER = (
+    b"%% ==== FIXTURE SHIM -- do not use outside fixture generation ====\r\n"
+    b"%% Byte-identical to v3dot1/VAR/VARdrawpost.m with three lines appended\r\n"
+    b"%% that record the draw it produced, so the identical sequence can be\r\n"
+    b"%% injected into the Julia port (M2). The draw itself uses wishrnd and\r\n"
+    b"%% mvnrnd, whose streams cannot be reproduced across languages -- so the\r\n"
+    b"%% draws are recorded rather than replayed from a common seed.\r\n"
+    b"%% Nothing in the computation is changed.\r\n"
+    b"%% Regenerate with test/fixtures/gen/shim/make_shim.py.\r\n"
+)
+POST_TAIL = (
+    b"\r\n"
+    b"%% ---- fixture recording (appended by make_shim.py) ----\r\n"
+    b"global VARTB_POST\r\n"
+    b"if isempty(VARTB_POST); VARTB_POST = {}; end\r\n"
+    b"VARTB_POST{end+1} = {sigma_draw, Ft_draw};\r\n"
+)
+_src = (ROOT / "v3dot1" / "VAR" / "VARdrawpost.m").read_bytes()
+(HERE / "VARdrawpost.m").write_bytes(POST_HEADER + _src + POST_TAIL)
+print(f"wrote {HERE / 'VARdrawpost.m'} (3 recording lines appended)")
