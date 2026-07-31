@@ -28,6 +28,12 @@ generator = "gen/gen_phase3.m"
 sha256 = "839745986a284c8bd5399830b99a4e97b6ad1be317feea5de7297e10d8cf402f"
 bytes = 190754
 
+[fixtures.phase3b]
+file = "phase3b.mat"
+generator = "gen/gen_phase3b.m"
+sha256 = "c6187f7b81a53b51fbbb1b0a26596a800f18f85a9ff4212017a060ef3c4dcd49"
+bytes = 12642
+
 [fixtures.phase4]
 file = "phase4.mat"
 generator = "gen/gen_phase4.m"

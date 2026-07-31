@@ -329,13 +329,32 @@ fixture: `GO_GK2015.m` uses exactly this specification.
   test using deliberately impossible restrictions. `SR`'s separate
   `sr_draw` budget is the layer that does raise.
 
-**Not checked:** the `whereToStart > 1` branch of `SignRestrictions` — the
-path that combines an instrument-identified first column (`VAR.Biv`) with
-sign restrictions on the remaining shocks, and the only consumer of the
-`randn(dy,1)` draw site. The brief calls this combination out explicitly, so
-it is a real gap. Everything it depends on (`ident = "iv"`, `sigma_b`,
-`Biv`, and the square-`SIGN` path through the same loop) is validated;
-what is untested is the orthogonal-completion step itself.
+### Phase 3b — gap closed: IV combined with sign restrictions
+
+The original Phase 3 entry recorded the `whereToStart > 1` branch of
+`SignRestrictions` as untested. That branch combines an
+instrument-identified first column (`VAR.Biv`) with sign restrictions on the
+remaining shocks; it is the only consumer of the `randn(dy,1)` draw site and
+the only path that reads `VAR.sigma_b` rather than `VAR.sigma`. The
+square-`SIGN` fixtures covered none of it.
+
+Now covered by `gen_phase3b.m` / `test_phase3b.jl`, exercising the documented
+two-stage sequence on Gertler-Karadi data: `VARir` with `ident = "iv"` to
+populate `Biv` and `sigma_b`, then `SR` with a 4×3 `SIGN` that omits the
+instrumented shock's column (so `whereToStart = 2`).
+
+Validated: `Biv`, `sigma_b`, and the resulting `B` against MATLAB at
+`rtol = 1e-6` (the same conditioning justification as the rest of the IV
+work). Also asserted, so the test cannot pass vacuously:
+
+- the recorded draw sequence contains **both** `(nvar, 1)` vectors and a
+  square rotation matrix — if the `(nvar, 1)` draws were absent, the branch
+  under test was never entered;
+- `B`'s first column still matches `Biv` up to sign, which is the point of
+  the two-stage sequence;
+- the remaining columns satisfy the imposed sign pattern;
+- both dimension guards fire — `SIGN` wider than tall, and a `SIGN` whose
+  implied number of pre-identified columns disagrees with `Biv`.
 
 ---
 

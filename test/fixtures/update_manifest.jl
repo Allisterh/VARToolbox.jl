@@ -27,6 +27,7 @@ const GENERATORS = Dict(
     "phase1" => "gen_phase1.m",
     "phase2" => "gen_phase2.m",
     "phase3" => "gen_phase3.m",
+    "phase3b" => "gen_phase3b.m",
     "phase4" => "gen_phase4.m",
     "phase5" => "gen_phase5.m",
     "phase6" => "gen_phase6.m",
