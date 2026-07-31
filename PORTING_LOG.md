@@ -39,10 +39,36 @@ environment, since every fixture depends on it.
    assumption) — they rely on the toolbox already being on the path.
 
 **Harness:** `test/fixtures/gen/*.m` (committed generators) →
-`test/fixtures/*.mat` (committed output) → `MANIFEST.toml` (SHA-256 per
-fixture). `runtests.jl` verifies hashes before running anything, so a
-fixture that drifted from its generator fails loudly. The suite needs no
-MATLAB licence.
+`test/fixtures/*.mat` (committed output) → `MANIFEST.toml` (two hashes per
+fixture). `runtests.jl` verifies them before running anything. The suite
+needs no MATLAB licence.
+
+**Correction (found late, with the MATLAB MCP restored).** This paragraph
+originally claimed a single SHA-256 over the file bytes made "a fixture that
+drifted from its generator fail loudly". **That was false.** MATLAB stamps a
+creation time into every `.mat` header —
+
+```
+MATLAB 5.0 MAT-file, Platform: MACA64, Created on: Fri Jul 31 00:20:32 2026
+```
+
+— so the byte hash changes on *every* regeneration regardless of content.
+Demonstrated: regenerating `phase1.mat` from an unchanged generator produced
+a different file hash (`9f003e3e…` → `51c48b7e…`) while all 115 fields
+compared bit-identical. A byte hash detects corruption of the committed
+file; it cannot detect generator drift, which is the thing that actually
+matters.
+
+Fixed by adding `content_sha256`, a canonical hash over the *data*
+(`test/fixtures/content_hash.jl`): keys sorted, types tagged, sizes
+included, numeric blocks hashed from raw bytes. It is stable across
+regeneration — verified — so drift now genuinely changes it. The test suite
+asserts on `content_sha256`; the byte hash is recorded for integrity and
+downgraded to an informational message.
+
+Six negative tests keep the check from passing vacuously: perturbing a value
+by 1e-12, adding a key, removing a key and introducing a NaN must each
+change the hash, while reordering keys must not.
 
 **Not checked:** the `quality=1` export path (out of scope with plotting);
 whether the Primer's *numbers* are correct, only that it completes.

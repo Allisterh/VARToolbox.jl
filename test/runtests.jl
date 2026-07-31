@@ -3,6 +3,7 @@ using VARToolbox
 using LinearAlgebra
 using MAT
 using SHA
+include(joinpath(@__DIR__, "fixtures", "content_hash.jl"))
 using Random
 using Statistics
 using Distributions
@@ -79,32 +80,80 @@ end
 
 @testset "VARToolbox.jl" begin
     @testset "fixture integrity" begin
-        # Fixtures are committed so the suite runs without MATLAB. Verify
-        # they still hash to what the manifest recorded, so a fixture that
-        # drifted from its generator fails loudly rather than silently
-        # changing what "golden" means.
+        # Fixtures are committed so the suite runs without MATLAB. Two
+        # different checks, because they answer different questions:
+        #
+        #   content_sha256 -- has the DATA changed? Asserted. This is what
+        #       catches a generator that drifted from its committed output.
+        #   sha256 (bytes) -- has the FILE changed? Warned about only.
+        #       MATLAB stamps a creation timestamp into every .mat header,
+        #       so this differs after any regeneration even when every value
+        #       is bit-identical (verified: regenerating phase1.mat gave a
+        #       different file hash with all 115 fields comparing equal).
         manifest = joinpath(FIXDIR, "MANIFEST.toml")
         @test isfile(manifest)
-        recorded = Dict{String,String}()
+        bytes_h = Dict{String,String}()
+        content_h = Dict{String,String}()
         cur = ""
         for line in eachline(manifest)
             m = match(r"^\[fixtures\.(\w+)\]", line)
             m !== nothing && (cur = m.captures[1])
-            h = match(r"^sha256 = \"([0-9a-f]{64})\"", line)
-            h !== nothing && !isempty(cur) && (recorded[cur] = h.captures[1])
+            isempty(cur) && continue
+            b = match(r"^sha256 = \"([0-9a-f]{64})\"", line)
+            b !== nothing && (bytes_h[cur] = b.captures[1])
+            c = match(r"^content_sha256 = \"([0-9a-f]{64})\"", line)
+            c !== nothing && (content_h[cur] = c.captures[1])
         end
-        @test !isempty(recorded)
-        for (stem, want) in recorded
+        @test !isempty(content_h)
+        @test keys(content_h) == keys(bytes_h)
+
+        for (stem, want) in content_h
             path = joinpath(FIXDIR, "$stem.mat")
             @test isfile(path)
-            got = open(path) do io
-                bytes2hex(sha256(io))
-            end
+            got = content_hash(matread(path))
             if got != want
-                @warn "fixture $stem.mat does not match MANIFEST.toml; " *
-                      "regenerate with gen/gen_$stem.m then rerun update_manifest.jl"
+                @warn "fixture $stem.mat CONTENT differs from MANIFEST.toml -- " *
+                      "the data changed. Regenerate with gen/gen_$stem.m and " *
+                      "rerun update_manifest.jl, then review the diff."
             end
             @test got == want
+
+            gotb = open(io -> bytes2hex(sha256(io)), path)
+            gotb == bytes_h[stem] || @info(
+                "fixture $stem.mat bytes differ from MANIFEST.toml but its " *
+                "content matches -- expected after regeneration, since MATLAB " *
+                "stamps a creation time into the .mat header.")
+        end
+
+        @testset "content hash is sensitive to the data" begin
+            # A hash that never changes would pass every drift check
+            # vacuously. Assert it actually moves when a value moves, when
+            # a key is added or removed, and when NaN is involved -- but
+            # NOT when only the file's byte layout differs.
+            base = matread(joinpath(FIXDIR, "phase1.mat"))
+            h0 = content_hash(base)
+
+            perturbed = deepcopy(base)
+            perturbed["A"][1, 1] += 1e-12
+            @test content_hash(perturbed) != h0
+
+            added = deepcopy(base)
+            added["__extra__"] = [1.0]
+            @test content_hash(added) != h0
+
+            removed = deepcopy(base)
+            delete!(removed, first(sort(collect(keys(removed)))))
+            @test content_hash(removed) != h0
+
+            # NaN must hash consistently -- fixtures are full of it.
+            nanned = deepcopy(base)
+            nanned["A"][2, 2] = NaN
+            @test content_hash(nanned) != h0
+            @test content_hash(nanned) == content_hash(deepcopy(nanned))
+
+            # Key order must not matter.
+            reordered = Dict{String,Any}(reverse(collect(base)))
+            @test content_hash(reordered) == h0
         end
     end
 

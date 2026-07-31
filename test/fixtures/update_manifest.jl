@@ -19,6 +19,8 @@
 
 using SHA
 using Dates
+using MAT
+include(joinpath(@__DIR__, "content_hash.jl"))
 
 const FIXDIR = @__DIR__
 
@@ -49,8 +51,19 @@ function main()
     println(io, "# Regenerate with: julia --project=test test/fixtures/update_manifest.jl")
     println(io, "#")
     println(io, "# Fixtures are committed alongside their generators so that the test")
-    println(io, "# suite runs without a MATLAB licence. These hashes make drift between")
-    println(io, "# a generator and its committed output detectable.")
+    println(io, "# suite runs without a MATLAB licence.")
+    println(io, "#")
+    println(io, "# Two hashes per fixture, and they do different jobs:")
+    println(io, "#")
+    println(io, "#   content_sha256  a canonical hash over the DATA. Stable across")
+    println(io, "#                   regeneration, so a generator that has drifted from")
+    println(io, "#                   its committed output changes it. This is what the")
+    println(io, "#                   test suite asserts.")
+    println(io, "#   sha256          a hash of the file BYTES. Recorded for integrity,")
+    println(io, "#                   but MATLAB stamps a creation time into every .mat")
+    println(io, "#                   header, so this changes on EVERY regeneration even")
+    println(io, "#                   when the data is bit-identical. Checked as a")
+    println(io, "#                   warning only.")
     println(io)
     println(io, "[meta]")
     println(io, "updated = \"", Dates.format(Dates.now(), "yyyy-mm-dd"), "\"")
@@ -65,6 +78,7 @@ function main()
         println(io, "file = \"", m, "\"")
         println(io, "generator = \"gen/", gen, "\"")
         println(io, "sha256 = \"", sha256_file(joinpath(FIXDIR, m)), "\"")
+        println(io, "content_sha256 = \"", content_hash(matread(joinpath(FIXDIR, m))), "\"")
         println(io, "bytes = ", filesize(joinpath(FIXDIR, m)))
         println(io)
     end

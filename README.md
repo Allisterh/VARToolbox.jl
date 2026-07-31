@@ -164,8 +164,12 @@ julia --project=. -e 'using Pkg; Pkg.test()'
 ```
 
 The test suite needs **no MATLAB licence**: fixtures are committed alongside
-the generators that produced them, with a SHA-256 manifest verified before
-any test runs.
+the generators that produced them, with a manifest verified before any test
+runs. The manifest carries a canonical hash over the fixture *data* — stable
+across regeneration, so generator drift fails loudly — plus a byte hash
+recorded for integrity. The byte hash is informational only: MATLAB stamps a
+creation timestamp into every `.mat` header, so it changes on any
+regeneration even when the data is identical.
 
 Regenerating fixtures does need MATLAB:
 

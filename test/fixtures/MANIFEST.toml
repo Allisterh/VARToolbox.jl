@@ -2,8 +2,19 @@
 # Regenerate with: julia --project=test test/fixtures/update_manifest.jl
 #
 # Fixtures are committed alongside their generators so that the test
-# suite runs without a MATLAB licence. These hashes make drift between
-# a generator and its committed output detectable.
+# suite runs without a MATLAB licence.
+#
+# Two hashes per fixture, and they do different jobs:
+#
+#   content_sha256  a canonical hash over the DATA. Stable across
+#                   regeneration, so a generator that has drifted from
+#                   its committed output changes it. This is what the
+#                   test suite asserts.
+#   sha256          a hash of the file BYTES. Recorded for integrity,
+#                   but MATLAB stamps a creation time into every .mat
+#                   header, so this changes on EVERY regeneration even
+#                   when the data is bit-identical. Checked as a
+#                   warning only.
 
 [meta]
 updated = "2026-07-31"
@@ -14,47 +25,55 @@ source_commit = "7695feb9c72812e6f6f08c1288ccc8b927af0aa7"
 file = "phase1.mat"
 generator = "gen/gen_phase1.m"
 sha256 = "9f003e3e23732511f48c837d9fb930c8e5bf6bd3224f9e04b48c58b91f87d532"
+content_sha256 = "a3153d425fca22f3c67e07e6b56269035e731cd8857e81601a065859f88f8ce1"
 bytes = 12049
 
 [fixtures.phase2]
 file = "phase2.mat"
 generator = "gen/gen_phase2.m"
 sha256 = "877b1ae01709f666ad1a5f45ba25b75978689b82d512a4baf42b28edacfcb372"
+content_sha256 = "9585f0d61f02496c81983e60b840272cacf6e898012ded386a4aeef5344f5984"
 bytes = 108847
 
 [fixtures.phase3]
 file = "phase3.mat"
 generator = "gen/gen_phase3.m"
 sha256 = "839745986a284c8bd5399830b99a4e97b6ad1be317feea5de7297e10d8cf402f"
+content_sha256 = "b086cc0fad3aa79ca0ade605b538ceeb8f1361829eea47caac7a4801d43a6f44"
 bytes = 190754
 
 [fixtures.phase3b]
 file = "phase3b.mat"
 generator = "gen/gen_phase3b.m"
 sha256 = "c6187f7b81a53b51fbbb1b0a26596a800f18f85a9ff4212017a060ef3c4dcd49"
+content_sha256 = "0b2024612aa06e2f57ca5c392da4f56ea81cab18ed6577bb21dbbea59d6a32c8"
 bytes = 12642
 
 [fixtures.phase4]
 file = "phase4.mat"
 generator = "gen/gen_phase4.m"
 sha256 = "209d01a13b3326e2718757fc8f6c286624b7a62d74e2ab3127ce6a47524bd400"
+content_sha256 = "2510944e6a6cf14e5a4f7ff90c55f71b8143b9c8def381bb138f11d126496a13"
 bytes = 460841
 
 [fixtures.phase5]
 file = "phase5.mat"
 generator = "gen/gen_phase5.m"
 sha256 = "91627969b96253f9ac920abad8d33e0ae8a7a6930c055caf6ffbd8d9f6f3e796"
+content_sha256 = "816ecc2beb534c7ec889af353aa2210cf2703121da6b4f82933e5072e9dfa405"
 bytes = 26389
 
 [fixtures.phase6]
 file = "phase6.mat"
 generator = "gen/gen_phase6.m"
 sha256 = "6fa3a8cc3dd6283d275043b257334c1f2a147e9bb8ab615115ede0cfc367d6f1"
+content_sha256 = "c198dde94411233a5f8cea41e10b4566de76e193d9688e9552188d704f1ae8db"
 bytes = 5366374
 
 [fixtures.phase7]
 file = "phase7.mat"
 generator = "gen/gen_phase7.m"
 sha256 = "383f63d5377ca2f581e09a73d6c9270c1c836ba9a15e78f1d25829c7041626c6"
+content_sha256 = "a913131177f8b88d97a00d064767c17de07fae85d3ac5485c68367911b625497"
 bytes = 23376
 
