@@ -11,7 +11,7 @@ Licensed **GPL-3.0**, inherited from the original. See
 ## Status
 
 The estimation and inference pipeline is complete and validated against the
-MATLAB original. **1,595 tests pass**, almost all of them exact
+MATLAB original. **1,602 tests pass**, almost all of them exact
 golden-master comparisons at `rtol = 1e-10` against output dumped from
 MATLAB R2026a.
 
