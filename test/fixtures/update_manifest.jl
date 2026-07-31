@@ -31,6 +31,7 @@ const GENERATORS = Dict(
     "phase4" => "gen_phase4.m",
     "phase5" => "gen_phase5.m",
     "phase6" => "gen_phase6.m",
+    "phase7" => "gen_phase7.m",
 )
 
 function sha256_file(path)

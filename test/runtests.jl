@@ -115,4 +115,5 @@ end
     include("test_phase4.jl")
     include("test_phase5.jl")
     include("test_phase6.jl")
+    include("test_phase7.jl")
 end

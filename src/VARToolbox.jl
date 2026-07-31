@@ -55,6 +55,9 @@ include("bands.jl")
 # ---- Phase 5: local projections ---------------------------------------
 include("lp.jl")
 
+# ---- Stats (independent of the VAR pipeline) --------------------------
+include("stats.jl")
+
 # Auxiliary
 export tdis_prb, tdis_inv, fdis_prb, beta_pdf, beta_inv
 export nanmean, nansum, nanstd, nanvar, nansem, nanmedian, nanmax, nanmin
@@ -78,6 +81,10 @@ export VARirband, VARvdband
 
 # Local projections (independent API)
 export LPmodel, LPoption, LPmakex, LPOptions, LPOutput, HorizonResult
+
+# Stats
+export MovAvg, MovSum, MovStd, MovAvgCent, MovCorr, MovCorrCent
+export censor, CorrTable, PairCorr, CrossCorrelation
 
 # Re-exported so `@set VARopt.nsteps = 40` works without an extra `using`.
 export @set

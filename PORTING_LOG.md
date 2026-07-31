@@ -554,3 +554,74 @@ the recorded posterior draws (a 73×6 coefficient matrix per draw) to a
 reasonable fixture size. Both languages use the reduced count, so the
 comparison is unaffected; only the width of the reported bands differs from
 the published figure.
+
+---
+
+## Stats/ — moving-window transforms and correlations
+
+**Validated against:** `MovAvg`, `MovSum`, `MovStd`, `MovAvgCent`,
+`MovCorr`, `MovCorrCent`, `censor`, `CorrTable` (listwise and pairwise),
+`PairCorr`, `CrossCorrelation`.
+
+**Tolerance:** `rtol = 1e-10`. Deterministic throughout. **Result:** 1595 /
+1595 tests pass across all phases.
+
+### Upstream inconsistencies replicated and pinned
+
+1. **`window` means different things in parallel functions.** In `MovAvg`,
+   `MovSum` and `MovStd` it is a *total* window length; in `MovAvgCent` and
+   `MovCorrCent` it is a *half-width*, so the window spans `2*window+1`
+   rows. Pinned by a test asserting `MovAvgCent(X, 4)[5] == mean(X[1:9])`.
+2. **NaN handling differs between the trailing and centred versions.**
+   `MovAvg` uses a plain `mean`, so a NaN anywhere in the window
+   propagates; `MovAvgCent` uses `nanmean`, so NaNs are skipped. Pinned by
+   a fixture with scattered NaNs showing one propagates and the other
+   does not.
+3. **`CorrTable` does not blank an exactly-zero upper-triangular entry.**
+   It uses `CORR(find(triu(CORR))) = NaN`, and `find` returns only non-zero
+   elements, so a correlation of exactly `0.0` above the diagonal survives
+   as `0.0` rather than becoming `NaN`. Replicated.
+4. **`PairCorr` takes logs unconditionally**, with no positivity check, and
+   blanks any column whose *first* observation is NaN (not any NaN).
+   Replicated; documented that only strictly positive levels should be
+   passed.
+
+### Not ported from Stats/
+
+`SummStats`, `CorrTableUnbalanced`, `CorrUnbalanced`,
+`PairCorrUnbalanced`, `CrossWeightAverage`. `SummStats` additionally
+requires `adf` + `ztcrit` (a 224-line augmented Dickey-Fuller routine with
+a hardcoded critical-value table) and MATLAB's `skewness`/`kurtosis` —
+**two more Statistics Toolbox dependencies not catalogued in the brief**.
+The `*Unbalanced` variants are alternative NaN-handling paths over the same
+statistics.
+
+Only the *numeric* outputs of `CorrTable` and `PairCorr` are ported; both
+also return cell-array tables and print through `mprint`, which belongs to
+the display layer below.
+
+---
+
+## What remains
+
+Stated plainly rather than left implicit.
+
+| item | size | why deferred |
+|---|---|---|
+| `Figure/` plotting layer | 20 files | Deferred by the brief. Should land as a package extension (`ext/VARToolboxPlotsExt.jl`) so core estimation never depends on a plotting stack. |
+| Print layer — `VARprint`, `OLSprint`, `ARDLprint`, `TabPrint`, `mprint`, `roundnum2cell` | ~900 lines | Display-only. Produces formatted text tables; no number any downstream calculation consumes. `mprint` alone is 298 lines of format-string handling. |
+| `SummStats` + `adf` + `ztcrit` | ~340 lines | Needs an augmented Dickey-Fuller implementation with a hardcoded critical-value table, plus `skewness`/`kurtosis`. Independent of the VAR pipeline. |
+| `Stats/*Unbalanced`, `CrossWeightAverage` | ~400 lines | Alternative NaN-handling paths over statistics already ported. |
+| `Auxiliary/` odds and ends — `winsor`, `roundn`, `tdiff`, `XoX`, `datatreat`, `cell2num`, `NoSpace`, `m2tex`, `ws2struct`, `clearex`, `SupTitle`, `rgb`, `hatchfill2` | — | Either plotting-layer (deferred with `Figure/`) or unreferenced by the core call graph. |
+
+Everything the VAR pipeline itself depends on is ported and validated.
+
+### Coverage gaps within what *is* ported
+
+- The `maxEig >= 0.9999` resample-and-retry branch in `VARirband`/
+  `VARvdband` is never deliberately triggered by a fixture.
+- `VARvdband` is not tested with an exogenous variable.
+- `LPmodel` is not tested with a multi-column `S`.
+- `VARdrawpost`'s sampling path is checked only for shape and symmetry;
+  its distributional correctness is not asserted (the deterministic
+  computation downstream of the draw *is* validated exactly, by injection).
