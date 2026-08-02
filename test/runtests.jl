@@ -159,11 +159,19 @@ end
 
     @testset "vendored data integrity" begin
         # data/ carries byte-for-byte copies of the toolbox's .xlsx sheets
-        # so the package is self-contained outside the monorepo. When the
-        # MATLAB original is present, assert the copies have not drifted;
-        # standalone checkouts skip (there is nothing to compare against).
+        # so the package is self-contained outside the MATLAB monorepo
+        # (https://github.com/hirothreading/VAR-Toolbox). To assert the
+        # copies have not drifted from the originals, point
+        # VARTOOLBOX_V3DOT1 at a checkout's v3dot1/ directory:
+        #
+        #   VARTOOLBOX_V3DOT1=~/GitHub/VAR-Toolbox/v3dot1 julia --project -e 'using Pkg; Pkg.test()'
+        #
+        # Without it the check skips (there is nothing to compare against).
+        # The relative fallback covers the historical monorepo layout where
+        # this package lived at <monorepo>/julia/VARToolbox.
         datadir = joinpath(@__DIR__, "..", "data")
-        v3 = normpath(joinpath(@__DIR__, "..", "..", "..", "v3dot1"))
+        v3 = get(ENV, "VARTOOLBOX_V3DOT1",
+                 normpath(joinpath(@__DIR__, "..", "..", "..", "v3dot1")))
         pairs = [
             ("SW2001", joinpath("Replic", "SW2001")),
             ("BQ1989", joinpath("Replic", "BQ1989")),
@@ -180,7 +188,7 @@ end
                 if isfile(src)
                     @test read(joinpath(datadir, sub, f)) == read(src)
                 else
-                    @info "monorepo not present; skipping drift check for data/$sub/$f"
+                    @info "MATLAB original not found (set VARTOOLBOX_V3DOT1); skipping drift check for data/$sub/$f"
                 end
             end
         end

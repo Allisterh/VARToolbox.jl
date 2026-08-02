@@ -44,9 +44,9 @@ with the generator that produced it, so drift between a generator and its
 committed output is detectable without a MATLAB licence.
 
 Running the test suite and examples requires neither MATLAB nor the
-monorepo — the replication `.xlsx` sheets are vendored under `data/`
+MATLAB fork — the replication `.xlsx` sheets are vendored under `data/`
 (see `data/README.md`). Two maintenance tasks do require a checkout of the
-monorepo fork above alongside MATLAB: regenerating fixtures
-(`test/fixtures/gen/*.m` read `v3dot1/` directly) and the vendored-data
-drift check in `runtests.jl`, which activates automatically whenever
-`v3dot1/` is present three levels up.
+fork above alongside MATLAB itself: regenerating fixtures
+(`test/fixtures/gen/*.m` read its `v3dot1/` directly) and the
+vendored-data drift check in `runtests.jl`, which activates when the
+`VARTOOLBOX_V3DOT1` environment variable points at a `v3dot1/` checkout.

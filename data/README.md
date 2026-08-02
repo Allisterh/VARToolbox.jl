@@ -17,6 +17,7 @@ Sheets use the toolbox's layout: long names on row 1, short names on row 2,
 dates in column 1, and the sentinel `123456789` for missing values
 (converted by `Num2NaN`).
 
-Do not edit these. When the MATLAB monorepo is present (`v3dot1/` three
-levels up), `test/runtests.jl` asserts each copy is still byte-identical
-to its upstream original, so drift fails the suite.
+Do not edit these. With the `VARTOOLBOX_V3DOT1` environment variable
+pointing at a checkout of the MATLAB toolbox's `v3dot1/` directory,
+`test/runtests.jl` asserts each copy is still byte-identical to its
+upstream original, so drift fails the suite.
