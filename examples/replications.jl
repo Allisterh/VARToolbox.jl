@@ -179,7 +179,9 @@ end
 Uhlig (2005, JME): a six-variable monthly VAR identified by sign
 restrictions on the monetary policy shock — the deflator, commodity prices
 and non-borrowed reserves fall, the federal funds rate rises, and output and
-total reserves are left unrestricted.
+total reserves are left unrestricted. The restrictions are imposed for six
+months (`sr_hor = 6`) and the bands are 68% credible intervals (`pctg = 68`),
+as in `GO_Uhlig2005.m`.
 
 12 lags, 60-step horizon. `GO_Uhlig2005.m` rescales five of the six series
 by 100 before estimation; that is reproduced here.
@@ -201,6 +203,8 @@ function uhlig_2005(; ndraws::Int = 100, src = nothing, post_draws = nothing,
     VAR, VARopt = VARmodel(data, 12, 1)
     VARopt = @set VARopt.nsteps = 60
     VARopt = @set VARopt.ndraws = ndraws
+    VARopt = @set VARopt.sr_hor = 6
+    VARopt = @set VARopt.pctg = 68.0
 
     #        y   pi  comm nbres res  ff
     SIGN = [0.0 0 0 0 0 0     # Real GDP        -- unrestricted

@@ -58,6 +58,9 @@ include("lp.jl")
 # ---- Stats (independent of the VAR pipeline) --------------------------
 include("stats.jl")
 
+# ---- Phase 8: plotting stubs (methods live in ext/VARToolboxPlotsExt) --
+include("plotstubs.jl")
+
 # Auxiliary
 export tdis_prb, tdis_inv, fdis_prb, beta_pdf, beta_inv
 export nanmean, nansum, nanstd, nanvar, nansem, nanmedian, nanmax, nanmin
@@ -85,6 +88,10 @@ export LPmodel, LPoption, LPmakex, LPOptions, LPOutput, HorizonResult
 # Stats
 export MovAvg, MovSum, MovStd, MovAvgCent, MovCorr, MovCorrCent
 export censor, CorrTable, PairCorr, CrossCorrelation
+
+# Plotting (extension VARToolboxPlotsExt; requires `using Plots`)
+export VARirplot, VARvdplot, VARhdplot, SRirplot, SRvdplot, SRhdplot
+export PlotSwathe, PlotSwathe!, AreaPlot!, cmap, DatesPlot!, FigSize, SaveFigure
 
 # Re-exported so `@set VARopt.nsteps = 40` works without an extra `using`.
 export @set

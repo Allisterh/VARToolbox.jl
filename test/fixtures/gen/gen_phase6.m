@@ -21,6 +21,12 @@ function gen_phase6(outdir)
 % Both languages use the reduced count, so the comparison is unaffected;
 % only the width of the reported bands differs from the paper.
 %
+% Revision note: the first version of this generator also silently left
+% VARopt.sr_hor and VARopt.pctg at their defaults (1, 95) where
+% GO_Uhlig2005.m sets 6 and 68 -- so the Uhlig fixture replicated a variant
+% of the paper, not the paper. Caught by the Phase 8 figure comparison;
+% both are now set to the GO script's values.
+%
 % Usage:  gen_phase6('/abs/path/to/test/fixtures')
 
 if ~exist('outdir','var'); error('gen_phase6: outdir is required'); end
@@ -166,8 +172,11 @@ F.uh_vnames = vnames;
 [VAR, VARopt] = VARmodel(X,12,1);
 VARopt.nsteps = 60;
 VARopt.ndraws = 100;      % reduced from 500 for fixture size; see header
+VARopt.sr_hor = 6;        % GO_Uhlig2005.m: restrictions imposed for 6 months
+VARopt.pctg   = 68;       % GO_Uhlig2005.m: 68% credible intervals
 F.uh_nsteps = VARopt.nsteps; F.uh_ndraws = VARopt.ndraws;
 F.uh_sr_mod = VARopt.sr_mod;
+F.uh_sr_hor = VARopt.sr_hor; F.uh_pctg = VARopt.pctg;
 
 SIGN = [ 0,0,0,0,0,0
         -1,0,0,0,0,0

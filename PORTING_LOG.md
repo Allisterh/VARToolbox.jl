@@ -628,13 +628,157 @@ the display layer below.
 
 ---
 
+## Phase 8 — the plotting layer
+
+**Scope.** The six plot functions in `VAR/` (`VARirplot`, `VARvdplot`,
+`VARhdplot`, `SRirplot`, `SRvdplot`, `SRhdplot`) and the `Figure/`
+primitives they stand on (`PlotSwathe` + `PlotSwatheOption`, `AreaPlot`,
+`cmap`, `DatesPlot`, `FigSize`, `SaveFigure`, plus the `LegOption`/
+`LegSubplot` bottom-legend behaviour and `SupTitle`). Shipped as the
+package extension `ext/VARToolboxPlotsExt/` with a weak Plots.jl (GR)
+dependency, per the brief: core estimation never loads a plotting stack.
+Also `examples/figures.jl`, which regenerates every figure the MATLAB
+toolbox produces for the four replications into `examples/figures/`.
+
+### The fidelity target is v3dot1 + v3dot0's `quality==2` branches
+
+v3dot1 dropped the `quality==2` save branch from all six plot functions
+while `VARoption.m:31` defaults `quality = 2` — so the stock v3dot1 plot
+layer **saves nothing** for `GO_SW2001.m`/`GO_BQ1989.m`, and the committed
+upstream reference PDFs demonstrably embody v3dot0's behaviour (the VD
+figure shows the bottom `LegSubplot` strip that only exists in v3dot0's
+`quality==2` branch). `diff` confirms the v3dot0 and v3dot1 versions of
+`VARirplot`/`VARvdplot`/`VARhdplot` differ *only* in headers and the
+save/`clf` branches, so "v3dot1 logic with the v3dot0 branches restored"
+is a well-defined single target, and the MATLAB reference figures below
+were produced with verbatim v3dot0 copies shadowing v3dot1 on the path.
+
+### How it was validated
+
+1. **Curve identity by construction.** `examples/figures.jl` replays the
+   recorded draws in `test/fixtures/phase6.mat`; a scratch MATLAB harness
+   re-ran the four GO-script pipelines with the same seeds and asserted
+   its band/SR arrays **bit-identical** (`isequaln`) to that fixture, then
+   rendered the same 12 figures with MATLAB R2026a's own plot layer. Every
+   plotted curve is therefore numerically identical on both sides, and the
+   side-by-side comparison isolates pure rendering.
+2. **Visual comparison** of all 12 figure pairs (MATLAB left, Julia right)
+   reviewed at 900 px; curves, layouts, colours, legends and date axes
+   match. Accepted rendering differences are listed below.
+3. **Primitive unit tests** (`test/test_phase8.jl`): `cmap` against the 9
+   hard-coded rows of `cmap.m`; `_date_ticks` against `XTick`/
+   `XTickLabel`/`XLim` dumped from MATLAB R2026a for quarterly, Q4-start,
+   annual and monthly cases; `PlotSwathe`/`AreaPlot` series data, stacking
+   order, fill colours and NaN handling.
+4. **Plot-object assertions**: each function's returned `Plots.Plot`
+   carries exactly the input arrays (median series `==` `IR`, band series
+   `==` `INF`/`SUP`, HD data line `==` row sums of `HD.shock`), the right
+   subplot counts, titles, and output files (`%PDF` magic, one file per
+   shock/variable with upstream's names). One test per `pick` meaning.
+5. **Determinism**: two consecutive `generate_all_figures()` runs produce
+   raster-identical PDFs (`pdftoppm` SHA-256 over pages).
+
+### Found by this phase: the Uhlig fixture didn't match `GO_Uhlig2005.m`
+
+The first figure comparison showed Julia's Uhlig bands far wider than the
+committed upstream PDF — more than draw noise could explain. Cause: the
+Phase 6 fixture generator (and `examples/replications.jl`) had silently
+left `VARopt.sr_hor` and `VARopt.pctg` at their defaults (1, 95) where
+`GO_Uhlig2005.m` sets **6 and 68**. Both languages agreed with each other
+at `1e-10` throughout — the port was faithful to a *variant* of the paper,
+and no numeric test could catch it. Fixed in `gen_phase6.m` and
+`uhlig_2005(...)`; `phase6.mat` regenerated (verified: all 56 SW/BQ/GK
+fields bit-unchanged, only the 9 Uhlig result fields changed, plus new
+`uh_sr_hor`/`uh_pctg` fields); MANIFEST updated. This is exactly the class
+of error the figure-replication exercise exists to catch.
+
+### Deviations (beyond replicating v3dot0's save behaviour)
+
+1. **All `quality` levels write a vector PDF.** Upstream: `0` → triple
+   `print -dpdf -r100` (raster workaround), `1` → `export_fig`
+   (not shipped in v3dot1 — always crashes), `2` → `exportgraphics`.
+   Julia's native vector export supersedes all three; the argument is
+   accepted and ignored.
+2. **`VARirplot` clears between shocks.** v3dot1 comments out
+   `clf('reset')`/`close all`, so successive shocks overplot into one
+   axes; v3dot0 (and the committed reference figures) clear. Each shock
+   gets a fresh figure.
+3. **Always-crash repairs**, same policy as Phases 2–5: `VARhdplot`'s
+   `quality==0` legend references undefined `vsnames` (→ `snames`) and the
+   HD `suptitle` branches an undefined loop index `jj` (→ current
+   variable). `SRhdplot.m:83`'s use of `vnames` for the legend is a bug
+   but *not* a crash — replicated.
+4. **Marker `'*'` → `:star6`** (markersize 4): GR has no stroke-asterisk
+   marker glyph.
+5. **`LegSubplot` → a dedicated bottom legend row** (frameless subplot,
+   `legend_columns`, transparent box): Plots has no floating figure-level
+   legend. Geometry differs slightly (a reserved ~10% row vs. an overlay).
+6. **`SupTitle` → `plot_title`** without upstream's manual axis-shrinking
+   geometry. Only reachable via `suptitle == 1`, which no toolbox script
+   sets.
+7. **`FigSize()`'s no-arg full-screen variant is not ported** (meaningless
+   headless); `FigSize(x, y)` returns a pixel tuple (1 px = 1 PDF pt in
+   GR, verified via MediaBox) rather than resizing a current figure —
+   there is no current-figure state in Plots.
+8. **The plot functions return their `Plots.Plot` objects** (MATLAB
+   returns nothing). Benign addition; it is what makes the object-level
+   tests possible.
+9. **`cmap(n)` throws for `n > 9`** instead of falling back to rows of
+   MATLAB's `parula`; no toolbox figure has more than 9 stacked series.
+10. **Fonts**: GR's built-in Helvetica-like default instead of forced
+    Helvetica — GR's named-font TTF path lacks the Unicode minus and
+    renders every negative tick label as `?`. Titles pin
+    "Helvetica Bold". MATLAB's `×10⁻³` axis multiplier does not exist in
+    GR: tick labels are plain decimals (the hand-rolled example figures
+    thin ticks to ≤ 5 to compensate). MATLAB pads y-limits to
+    tick-aligned "nice" numbers; Plots pads proportionally.
+11. **TeX shock names** (`\epsilon^{MonPol}`) in the Primer §9 example are
+    rendered as Unicode (`ε^MonPol`) in `examples/figures.jl` — GR
+    renders plain strings literally.
+
+### Upstream oddities replicated verbatim (and pinned by tests)
+
+- The **three inconsistent `pick` meanings**: `VARirplot` plots only shock
+  `k`; `VARvdplot` plots variables `1:k`; `VARhdplot` plots variables
+  `k:nvar`.
+- The **opaque band**: `VARirplot.m:77` sets the misspelled `SwatheOpt.trans`
+  (real field `transp`), so transparency is never enabled. `SRirplot.m:78`'s
+  `SwatheOpt.col` is likewise a no-op; its `cmap(1)`/`'x'` median is drawn
+  and then hidden under the opaque patch — both the dead option and the
+  buried line are reproduced for order fidelity.
+- **`PlotSwathe`'s INF/SUP naming swap**: an `n×2` swathe is transposed and
+  row 1 (INF) becomes `upp`, row 2 (SUP) becomes `low`. Harmless for a
+  filled band; the Julia fill series carries SUP as `y` and INF as
+  `fillrange`, pinned by a test.
+- **VD/HD `size` destructuring against the transposed layout**
+  (`[nsteps, nvars, nshocks] = size(VD)` with `VD[step, shock, var]`) —
+  role-swapped variable names, harmless for square arrays, kept verbatim.
+- **`DatesPlot`'s monthly step is the literal `0.0833`**, which makes every
+  monthly tick position fractional (`12.0048, 24.0048, …`) and floors on
+  label indexing (MATLAB warns); quarterly Q4 starts place ticks beyond the
+  data and let `XLim` clip them. All reproduced and tested against MATLAB
+  dumps.
+- The `Uhligh_Replication` output filename typo (upstream's committed name).
+
+### Not checked
+
+- `SRirplot`/`SRvdplot`/`SRhdplot` have no upstream-rendered reference
+  (no toolbox script calls them — even `GO_Uhlig2005.m` hand-rolls its
+  figure), so they are exercised by unit tests only, sharing their body
+  with the `VAR*` versions.
+- The `quality==0` raster look (`-r100`) is not reproduced at all.
+- GR font metrics differ across platforms; tests assert object structure
+  and file existence, never pixels.
+
+---
+
 ## What remains
 
 Stated plainly rather than left implicit.
 
 | item | size | why deferred |
 |---|---|---|
-| `Figure/` plotting layer | 20 files | Deferred by the brief. Should land as a package extension (`ext/VARToolboxPlotsExt.jl`) so core estimation never depends on a plotting stack. |
+| `Figure/` leftovers — `BarPlot`, `PlotLine` + `PlotLineOption`, `PlotStatesShaded`, `pantone`, `LegPlot`, `cmap`'s parula tail | 6 files | The plotting layer itself landed in Phase 8 as `ext/VARToolboxPlotsExt`. These remainders are used by no toolbox figure; `PlotLine` is broken upstream (calls `FigFontOption`, which exists nowhere in the repo). |
 | Print layer — `VARprint`, `OLSprint`, `ARDLprint`, `TabPrint`, `mprint`, `roundnum2cell` | ~900 lines | Display-only. Produces formatted text tables; no number any downstream calculation consumes. `mprint` alone is 298 lines of format-string handling. |
 | `SummStats` + `adf` + `ztcrit` | ~340 lines | Needs an augmented Dickey-Fuller implementation with a hardcoded critical-value table, plus `skewness`/`kurtosis`. Independent of the VAR pipeline. |
 | `Stats/*Unbalanced`, `CrossWeightAverage` | ~400 lines | Alternative NaN-handling paths over statistics already ported. |

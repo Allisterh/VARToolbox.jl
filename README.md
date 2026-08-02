@@ -11,7 +11,7 @@ Licensed **GPL-3.0**, inherited from the original. See
 ## Status
 
 The estimation and inference pipeline is complete and validated against the
-MATLAB original. **1,602 tests pass**, almost all of them exact
+MATLAB original. **1,731 tests pass**, almost all of them exact
 golden-master comparisons at `rtol = 1e-10` against output dumped from
 MATLAB R2026a.
 
@@ -29,8 +29,15 @@ All four published replications shipped with the toolbox reproduce exactly:
 *any* implementation. Measured difference is `6.5e-8`. See
 [`PORTING_LOG.md`](PORTING_LOG.md).
 
-Not yet ported: the `Figure/` plotting layer and the text-table printing
-functions. See [Scope](#scope) below.
+The plotting layer ships as a package extension activated by `using Plots`
+— see [Plotting](#plotting). Every figure the MATLAB toolbox produces for
+the four replications is reproduced in
+[`examples/figures/`](examples/figures/), rendered from MATLAB-recorded
+draws so the curves are numerically identical, and compared side-by-side
+against MATLAB R2026a's own rendering.
+
+Not ported: the text-table printing functions and `SummStats`. See
+[Scope](#scope) below.
 
 ## Quick start
 
@@ -48,6 +55,38 @@ HD,  VAR = VARhd(VAR, VARopt)
 
 IRinf, IRsup, IRmed, IRbar = VARirband(VAR, VARopt)
 ```
+
+## Plotting
+
+The plotting layer is a package extension (`VARToolboxPlotsExt`): it
+activates when Plots.jl is loaded, so core estimation never drags in a
+plotting stack.
+
+```julia
+using VARToolbox, Plots                  # `using Plots` activates the extension
+
+VARopt = @set VARopt.vnames  = ["Unemployment", "Inflation", "Fed Funds"]
+VARopt = @set VARopt.figname = "graphics/SW_"
+
+VARirplot(IRbar, VARopt, IRinf, IRsup)   # one PDF per shock: SW_IR_1.pdf, ...
+VARvdplot(VDbar, VARopt)                 # SW_VD.pdf
+VARhdplot(HD, VARopt)                    # one PDF per variable: SW_HD_1.pdf, ...
+```
+
+The six plot functions (`VARirplot`, `VARvdplot`, `VARhdplot`, `SRirplot`,
+`SRvdplot`, `SRhdplot`) read `vnames`, `snames`, `figname`, `FigSize` (in
+cm, as in MATLAB), `quality`, `pick`, `firstdate` and `frequency` off
+`VARopt`, write `figname`-prefixed PDFs exactly like the MATLAB originals,
+and additionally return their `Plots.Plot` objects. The `Figure/` primitives
+they stand on are exported too: `PlotSwathe`/`PlotSwathe!`, `AreaPlot!`,
+`cmap`, `DatesPlot!`, `FigSize`, `SaveFigure`.
+
+The fidelity target is v3dot1's plot layer with v3dot0's `quality == 2`
+save branches restored — v3dot1 dropped them while defaulting
+`quality = 2`, so the stock v3dot1 layer silently saves nothing. That and
+every other deviation (marker glyph, legend geometry, all quality levels
+writing vector PDFs) is listed in [`PORTING_LOG.md`](PORTING_LOG.md)
+("Phase 8").
 
 ## Three things that will surprise a MATLAB user
 
@@ -142,14 +181,18 @@ Renamed because `const` is reserved in Julia: `VAR.const` → `VAR.constant`,
 ## Scope
 
 **Included:** `Utils/`, `Auxiliary/`, `OLSmodel`, `VARmodel`, `ARDLmodel`,
-the identification layer, error bands, local projections, and the analytical
-part of `Stats/`.
+the identification layer, error bands, local projections, the analytical
+part of `Stats/`, and the plotting layer (the six `VAR/*plot` functions
+plus the `Figure/` primitives they use — `PlotSwathe`, `AreaPlot`, `cmap`,
+`DatesPlot`, `FigSize`, `SaveFigure` — as the `VARToolboxPlotsExt`
+extension).
 
 **Not included:**
 
-- **`Figure/`** (20 files). Will land as a package extension
-  (`ext/VARToolboxPlotsExt.jl`) so core estimation never depends on a
-  plotting stack.
+- **The rest of `Figure/`** — `BarPlot`, `PlotLine` (broken upstream: it
+  calls a function that does not exist in the toolbox), `PlotStatesShaded`,
+  `pantone`, `LegPlot`, and `cmap`'s `parula` tail for more than 9 series.
+  None is used by any toolbox figure.
 - **The text-table printing layer** — `VARprint`, `OLSprint`, `ARDLprint`,
   `TabPrint`, `mprint`, `roundnum2cell`. Display-only; produces no number
   any downstream calculation uses.
