@@ -1,0 +1,11 @@
+# Patterns are relative to this directory, so this file works both inside
+# the monorepo and as the root .gitignore of the standalone VARToolbox.jl
+# repository.
+# NB: explicit paths, not **/Manifest.toml -- that glob would also match
+# test/fixtures/MANIFEST.toml on case-insensitive filesystems, and the test
+# suite requires that file.
+Manifest.toml
+test/Manifest.toml
+examples/Manifest.toml
+*.jl.cov
+*.jl.mem

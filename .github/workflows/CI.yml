@@ -1,0 +1,43 @@
+name: CI
+
+# The test suite needs no MATLAB licence: golden-master fixtures are
+# committed alongside the generators that produced them, and runtests.jl
+# verifies their SHA-256 against test/fixtures/MANIFEST.toml before running
+# anything. Regenerating fixtures does need MATLAB and the VAR-Toolbox
+# monorepo (https://github.com/hirothreading/VAR-Toolbox).
+#
+# NB: in the monorepo this file sits at julia/VARToolbox/.github/ where
+# GitHub ignores it; it becomes the active workflow in the standalone
+# VARToolbox.jl repository, whose root is this directory.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Headless GR for the plotting-extension tests (test_phase8.jl also sets
+# this itself; the workflow-level value is belt and braces).
+env:
+  GKSwstype: "100"
+
+jobs:
+  test:
+    name: Julia ${{ matrix.julia-version }} - ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        julia-version: ['1.10', '1']   # 1.10 is the LTS; '1' tracks stable
+        os: [ubuntu-latest, macOS-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ matrix.julia-version }}
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/julia-buildpkg@v1
+      - uses: julia-actions/julia-runtest@v1

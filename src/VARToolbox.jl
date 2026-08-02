@@ -7,7 +7,8 @@
 # GPL-3.0. See PROVENANCE.md for the upstream commit this was ported from
 # and the reference environment used to generate golden-master fixtures.
 #
-# Design decisions that shape the whole package (see ../DESIGN.md):
+# Design decisions that shape the whole package (see ../DESIGN.md, at the
+# package root):
 #
 #   D1  Functions keep their MATLAB names verbatim (`VARmodel`, `VARir`,
 #       `SR`, ...). Types take distinct suffixed names (`VARModel`,

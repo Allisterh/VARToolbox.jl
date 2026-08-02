@@ -1,5 +1,8 @@
 # VARToolbox.jl
 
+[![CI](https://github.com/hirothreading/VARToolbox.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/hirothreading/VARToolbox.jl/actions/workflows/CI.yml)
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
+
 A Julia port of **Ambrogio Cesa-Bianchi's VAR Toolbox** (MATLAB, v3.1):
 reduced-form VAR estimation, five identification schemes, impulse responses,
 forecast error variance decompositions, historical decompositions, bootstrap
@@ -229,8 +232,15 @@ calls through a wrapper that saves each draw. `make_shim.py` regenerates
 them in byte mode, so the diff against upstream stays a two- or three-line
 audit trail.
 
-## Attribution
+## Attribution and citing
 
 Original MATLAB toolbox © Ambrogio Cesa-Bianchi,
 <https://github.com/ambropo/VAR-Toolbox>. This port is a derivative work
-under GPL-3.0.
+under GPL-3.0. See [`PROVENANCE.md`](PROVENANCE.md) for the exact upstream
+commit and [`PORT_SUMMARY.md`](PORT_SUMMARY.md) for how the port was
+validated.
+
+If you use this package in academic work, please cite the original
+toolbox (Cesa-Bianchi, A., *VAR Toolbox*,
+<https://github.com/ambropo/VAR-Toolbox>) alongside this port
+(<https://github.com/hirothreading/VARToolbox.jl>).

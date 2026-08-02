@@ -1,7 +1,7 @@
 name = "VARToolbox"
 uuid = "90c2f340-8ceb-4bc8-90ac-e631e7e546ed"
 authors = ["Ambrogio Cesa-Bianchi <ambrogiocesabianchi@gmail.com> (original MATLAB toolbox)"]
-version = "0.1.0-DEV"
+version = "0.1.0"
 
 [deps]
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
