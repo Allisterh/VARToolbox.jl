@@ -35,7 +35,7 @@ isdefined(@__MODULE__, :load_replication_data) ||
 
 const FIGURES_DIR = joinpath(@__DIR__, "figures")
 const FIXTURES_DIR = normpath(joinpath(@__DIR__, "..", "test", "fixtures"))
-const PRIMER_DIR = normpath(joinpath(@__DIR__, "..", "..", "..", "v3dot1", "Primer"))
+const PRIMER_DIR = normpath(joinpath(@__DIR__, "..", "data", "Primer"))
 
 _pool(x) = [Matrix{Float64}(a) for a in vec(x)]
 _postpool(x) = [(Matrix{Float64}(p[1]), Matrix{Float64}(p[2])) for p in vec(x)]
@@ -66,7 +66,7 @@ upstream figures that exercise `VARhdplot` and `DatesPlot`. Deterministic —
 no draws involved.
 """
 function primer_sw_section9(outdir::AbstractString)
-    path = joinpath(PRIMER_DIR, "data", "SW2001_Data.xlsx")
+    path = joinpath(PRIMER_DIR, "SW2001_Data.xlsx")
     sheet = XLSX.readxlsx(path)["Sheet1"]
     raw = sheet[:]
     vnames = String[string(x) for x in raw[2, 2:end]]

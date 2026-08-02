@@ -11,7 +11,7 @@ Licensed **GPL-3.0**, inherited from the original. See
 ## Status
 
 The estimation and inference pipeline is complete and validated against the
-MATLAB original. **1,731 tests pass**, almost all of them exact
+MATLAB original. **1,741 tests pass**, almost all of them exact
 golden-master comparisons at `rtol = 1e-10` against output dumped from
 MATLAB R2026a.
 
@@ -206,9 +206,11 @@ extension).
 julia --project=. -e 'using Pkg; Pkg.test()'
 ```
 
-The test suite needs **no MATLAB licence**: fixtures are committed alongside
-the generators that produced them, with a manifest verified before any test
-runs. The manifest carries a canonical hash over the fixture *data* — stable
+The test suite needs **no MATLAB licence** and no files outside this
+package: the replication `.xlsx` sheets are vendored byte-for-byte in
+`data/` (checked against the MATLAB originals whenever the monorepo is
+present), and fixtures are committed alongside the generators that produced
+them, with a manifest verified before any test runs. The manifest carries a canonical hash over the fixture *data* — stable
 across regeneration, so generator drift fails loudly — plus a byte hash
 recorded for integrity. The byte hash is informational only: MATLAB stamps a
 creation timestamp into every `.mat` header, so it changes on any

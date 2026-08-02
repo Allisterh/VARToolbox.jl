@@ -157,6 +157,35 @@ end
         end
     end
 
+    @testset "vendored data integrity" begin
+        # data/ carries byte-for-byte copies of the toolbox's .xlsx sheets
+        # so the package is self-contained outside the monorepo. When the
+        # MATLAB original is present, assert the copies have not drifted;
+        # standalone checkouts skip (there is nothing to compare against).
+        datadir = joinpath(@__DIR__, "..", "data")
+        v3 = normpath(joinpath(@__DIR__, "..", "..", "..", "v3dot1"))
+        pairs = [
+            ("SW2001", joinpath("Replic", "SW2001")),
+            ("BQ1989", joinpath("Replic", "BQ1989")),
+            ("GK2015", joinpath("Replic", "GK2015")),
+            ("Uhlig2005", joinpath("Replic", "Uhlig2005")),
+            ("Primer", joinpath("Primer", "data")),
+        ]
+        for (sub, upstream) in pairs
+            vendored = readdir(joinpath(datadir, sub))
+            files = filter(f -> endswith(f, ".xlsx"), vendored)
+            @test !isempty(files)
+            for f in files
+                src = joinpath(v3, upstream, f)
+                if isfile(src)
+                    @test read(joinpath(datadir, sub, f)) == read(src)
+                else
+                    @info "monorepo not present; skipping drift check for data/$sub/$f"
+                end
+            end
+        end
+    end
+
     include("test_phase1.jl")
     include("test_phase2.jl")
     include("test_phase3.jl")

@@ -9,10 +9,12 @@
 #   Gertler & Karadi (2015, AEJ)  -- external instrument
 #   Uhlig           (2005, JME)   -- sign restrictions
 #
-# These read the SAME .xlsx fixtures as v3dot1/Replic/*/GO_*.m, so there is
-# one data source for both languages. Each returns a NamedTuple rather than
-# plotting, which lets test/test_phase6.jl assert against MATLAB output
-# instead of comparing figures by eye.
+# These read the SAME .xlsx fixtures as v3dot1/Replic/*/GO_*.m — vendored
+# byte-for-byte into ../data/ so the package is self-contained outside the
+# monorepo (runtests.jl asserts the vendored copies still match the
+# originals whenever v3dot1/ is present). Each returns a NamedTuple rather
+# than plotting, which lets test/test_phase6.jl assert against MATLAB
+# output instead of comparing figures by eye.
 #
 # Requires XLSX.jl (a test/example dependency, not a package dependency --
 # VARToolbox itself does no file I/O).
@@ -28,7 +30,7 @@ using XLSX
 using Random
 using LinearAlgebra
 
-const REPLIC_DIR = normpath(joinpath(@__DIR__, "..", "..", "..", "v3dot1", "Replic"))
+const REPLIC_DIR = normpath(joinpath(@__DIR__, "..", "data"))
 
 """
     load_replication_data(relpath) -> (data, vnames, vnames_long, dates)
