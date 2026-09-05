@@ -57,12 +57,13 @@ column.
 Same argument shape as [`VARmodel`](@ref), but this is a standalone class:
 it returns no options struct and does not feed `VARir`/`VARvd`/`VARhd`.
 
-!!! warning "Two different degrees-of-freedom conventions, both upstream"
-    `ARDLmodel.m` computes its confidence-interval critical value with
-    `tdis_inv(.025, nobse)` — the *effective* sample — but its p-values with
-    `tdis_prb(tstat, nobs)` — the *raw* sample, before lags are dropped. The
-    two disagree by `max(nlag, nlag_ex)` degrees of freedom. Replicated
-    as-is; `bint` and `tprob` are therefore not mutually consistent.
+!!! note "Degrees of freedom (upstream v4.0 fix)"
+    `bint` and `tprob` both use the residual degrees of freedom
+    `nobse - nvar` (effective sample less coefficients), the denominator of
+    `sige`. VAR Toolbox 3.1 used `nobse` for the critical value and the
+    *raw* `nobs` for the p-values — two conventions that disagreed with each
+    other and with the residual variance; v4.0 `ARDLmodel.m` uses
+    `nobse - nvar` for both. This port follows v4.0.
 """
 function ARDLmodel(ENDO::AbstractMatrix, nlag::Integer, const_::Integer = 1,
                    EXOG::Union{Nothing,AbstractMatrix} = nothing, nlag_ex::Integer = 0)
@@ -113,10 +114,11 @@ function ARDLmodel(ENDO::AbstractMatrix, nlag::Integer, const_::Integer = 1,
 
     tmp = sige .* diag(xpxi)
     bstd = sqrt.(tmp)
-    tcrit = -tdis_inv(0.025, nobse)                 # effective sample
+    # Residual degrees of freedom (v4.0); v3.1 used nobse and nobs here.
+    tcrit = -tdis_inv(0.025, nobse - nvar)
     bint = hcat(vec(beta) .- tcrit .* bstd, vec(beta) .+ tcrit .* bstd)
     tstat = vec(beta) ./ sqrt.(tmp)
-    tprob = tdis_prb(tstat, nobs)                   # raw sample -- upstream inconsistency
+    tprob = tdis_prb(tstat, nobse - nvar)
 
     ym = Y .- mean(Y)
     rsqr2raw = (transpose(ym)*ym)[1, 1]

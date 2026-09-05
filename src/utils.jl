@@ -54,26 +54,21 @@ Returns the trimmed data together with two counts. The three-value return
 is load-bearing: `fo`/`lo` are how callers trim an external instrument to
 the same sample the VAR was estimated on.
 
-!!! warning "`lo` is not the trailing-NaN count"
-    The docstring in `Utils/CommonSample.m` calls `lo` the "number of NaNs
-    at the end", but the loop that computes it never stops at the first
-    non-NaN:
+`fo` is the number of leading all-NaN rows (columns) and `lo` the number of
+trailing ones. An empty input is returned unchanged with `fo = lo = 0`.
 
-    ```matlab
-    for ii=1:rows(DATA)-fo
-        if isnan(temp(end+1-ii)); lo = lo+1; end
-    end
-    ```
-
-    So `lo` is the count of **every** NaN row outside the leading run, not
-    the length of the trailing run. The two coincide only when the data has
-    no interior gaps -- which is the case for the toolbox's own fixtures,
-    which is presumably why it went unnoticed. Replicated as-is; if your
-    data has interior NaNs, `lo` will exceed the trailing-run length.
+!!! note "Upstream v4.0 fixes adopted"
+    In VAR Toolbox 3.1 the loop computing `lo` never stopped at the first
+    non-NaN from the end, so `lo` counted **every** NaN row outside the
+    leading run rather than the trailing run; and an empty input raised an
+    index error. Both were fixed in v4.0 (`Utils/CommonSample.m`:
+    `else; break` in the trailing loop; early return on empty input). This
+    port follows v4.0, so `lo` is now the documented trailing count.
 """
 function CommonSample(DATA::AbstractMatrix, dim::Integer = 1)
     fo = 0
     lo = 0
+    isempty(DATA) && return DATA, fo, lo             # v4.0: empty in, empty out
     if dim == 1
         temp = vec(sum(DATA, dims = 2))
         n = length(temp)
@@ -86,7 +81,8 @@ function CommonSample(DATA::AbstractMatrix, dim::Integer = 1)
             end
         end
         for ii in 1:(size(DATA, 1)-fo)
-            isnan(temp[end+1-ii]) && (lo += 1)
+            isnan(temp[end+1-ii]) || break           # v4.0: stop at first non-NaN
+            lo += 1
         end
         keep = .!vec(any(isnan, DATA, dims = 2))
         OUT = DATA[keep, :]
@@ -102,7 +98,8 @@ function CommonSample(DATA::AbstractMatrix, dim::Integer = 1)
             end
         end
         for ii in 1:(size(DATA, 2)-fo)
-            isnan(temp[end+1-ii]) && (lo += 1)
+            isnan(temp[end+1-ii]) || break           # v4.0: stop at first non-NaN
+            lo += 1
         end
         keep = .!vec(any(isnan, DATA, dims = 1))
         OUT = DATA[:, keep]

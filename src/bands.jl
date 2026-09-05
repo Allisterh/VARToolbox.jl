@@ -55,9 +55,15 @@ function _artificial_data(VAR::VARModel, VARopt::VAROptions, src::DrawSource;
         u = resid[idx, :]
     elseif method == "wild"
         if allow_iv_wild && VARopt.ident == "iv"
-            nIV = size(VAR.IV, 2)
-            rr = 1 .- 2 .* (next_uniform!(src, nobs, nIV) .> 0.5)
-            u = resid .* (rr * ones(nIV, nvar))
+            # v4.0 (VARmodel.m): ONE Rademacher weight per observation,
+            # applied to the residual row and to every instrument column.
+            # v3.1 drew rand(nobs, nIV) and formed `resid .* (rr*ones(nIV,nvar))`
+            # -- a matrix product that SUMMED the k instrument columns' signs
+            # (support {-2,0,+2} for k = 2, annihilating ~38% of rows) while
+            # each instrument column kept its own sign. Identical for a
+            # single instrument, including the number of uniforms consumed.
+            rr = 1 .- 2 .* (next_uniform!(src, nobs, 1) .> 0.5)
+            u = resid .* (rr * ones(1, nvar))
             Z = vcat(VAR.IV[1:nlag, :], VAR.IV[(nlag+1):end, :] .* rr)
         else
             rr = 1 .- 2 .* (next_uniform!(src, nobs, 1) .> 0.5)
@@ -118,6 +124,23 @@ redrawn**, so `ndraws` counts accepted replications, not attempts. There is
 no cap on attempts — an explosive point estimate will loop indefinitely.
 That is upstream behaviour.
 
+!!! warning "`method = \"bs\"` is rejected under `ident = \"iv\"` (upstream v4.0)"
+    The i.i.d. residual bootstrap resamples residual dates independently of
+    the instrument, so artificial residual `t` comes from a random date but
+    is still paired with `z_t`: the contemporaneous pairing on which
+    proxy-SVAR identification rests is destroyed on every draw. VAR Toolbox
+    3.1 ran the combination anyway (on Gertler-Karadi the bootstrap mean
+    impact response had the wrong sign in 55% of draws); v4.0 raises. Use
+    `method = "wild"`. (v4.0 also adds a moving block bootstrap, `"mbb"`,
+    which this port does not yet implement.)
+
+!!! note "Wild bootstrap with several instruments (upstream v4.0 fix)"
+    With `ident = "iv"` one Rademacher weight per observation multiplies
+    the residual row and every column of `VAR.IV`. VAR Toolbox 3.1 drew one
+    weight per instrument and summed them into the residual weight, which
+    for `k >= 2` instruments annihilated a share of the residual rows; the
+    single-instrument case is unaffected and bit-identical.
+
 `MED` is the pointwise median across draws and `BAR` the pointwise mean;
 neither equals the point estimate from `VARir`.
 
@@ -135,6 +158,16 @@ function VARirband(VAR::VARModel, VARopt::VAROptions;
     src === nothing && (src = DrawSource(rng = rng))
     nsteps, ndraws, pctg = VARopt.nsteps, VARopt.ndraws, VARopt.pctg
     nvar = VAR.nvar
+
+    if VARopt.method == "bs" && VARopt.ident == "iv"
+        throw(ArgumentError(
+            "VARirband: method = \"bs\" is not valid with ident = \"iv\". The " *
+            "i.i.d. residual bootstrap resamples residual dates independently " *
+            "of the instrument, destroying the contemporaneous " *
+            "instrument/innovation pairing on which proxy-SVAR identification " *
+            "rests (VAR Toolbox 4.0 rejects this combination too). Use " *
+            "method = \"wild\"."))
+    end
 
     IR = zeros(nsteps, nvar, nvar, ndraws)
     tt = 1

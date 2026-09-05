@@ -2,6 +2,15 @@
 > split into its own repository (August 2026). The MATLAB original and the
 > porting brief live in the monorepo:
 > <https://github.com/hirothreading/VAR-Toolbox>.
+>
+> **Superseded in part (September 2026).** Upstream's v4.0 release fixed a
+> number of the defects catalogued in §4 below, and the port has adopted
+> those fixes — so several "replicated" behaviours described here
+> (`CommonSample`'s `lo`, the `SR` draw index, `VARhd`'s dropped exogenous
+> lags, the `OLSmodel`/`VARmodel`/`ARDLmodel` degrees of freedom, `shut`
+> under `wold`, the IV sample alignment) are now corrected by default. The
+> current record is `PORTING_LOG.md`, "Phase 9". This document is kept as
+> the account of the original port.
 
 # VAR Toolbox → Julia: port summary
 

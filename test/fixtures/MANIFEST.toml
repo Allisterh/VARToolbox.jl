@@ -17,9 +17,10 @@
 #                   warning only.
 
 [meta]
-updated = "2026-08-02"
+updated = "2026-09-05"
 matlab = "R2026a Update 3 (26.1.0.3276743)"
 source_commit = "7695feb9c72812e6f6f08c1288ccc8b927af0aa7"
+source_commit_v4dot0 = "36e706a0b6af6a6a901ce7084e5502ab71b75f42"
 
 [fixtures.phase1]
 file = "phase1.mat"
@@ -76,4 +77,11 @@ generator = "gen/gen_phase7.m"
 sha256 = "383f63d5377ca2f581e09a73d6c9270c1c836ba9a15e78f1d25829c7041626c6"
 content_sha256 = "a913131177f8b88d97a00d064767c17de07fae85d3ac5485c68367911b625497"
 bytes = 23376
+
+[fixtures.phase9]
+file = "phase9.mat"
+generator = "gen/gen_phase9.m"
+sha256 = "b4905303a979f99c67b629d0085e82e9d74cde7915e7537973aa659da1d45acb"
+content_sha256 = "242689eb2fbcdde18e85746618b959a8452047bfa37777bf908098b114fa9afc"
+bytes = 147287
 

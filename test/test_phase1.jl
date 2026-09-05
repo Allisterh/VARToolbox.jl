@@ -17,18 +17,20 @@ N = F["N"]
         OUT, fo, lo = CommonSample(N)
         @golden OUT F["cs_out"]
         @test fo == Int(F["cs_fo"])
-        @test lo == Int(F["cs_lo"])
 
-        # The fixture deliberately contains an INTERIOR NaN row. `lo` counts
-        # every NaN row outside the leading run, not the trailing run length
-        # -- upstream defect, replicated. Pin it so a "fix" cannot land silently.
-        @test lo == 3          # 2 trailing rows + 1 interior, not 2
+        # The fixture deliberately contains an INTERIOR NaN row. Under VAR
+        # Toolbox 3.1 `lo` counted every NaN row outside the leading run
+        # (the v3.1 fixture records 3); v4.0 fixed the loop so `lo` is the
+        # trailing-run length. The port follows v4.0 -- see test_phase9.jl
+        # for the v4.0 golden value. Pin the v3.1 value as NOT reproduced.
+        @test Int(F["cs_lo"]) == 3
+        @test lo == 2          # 2 trailing rows; the interior row no longer counts
         @test fo == 2
 
         OUT2, fo2, lo2 = CommonSample(permutedims(N), 2)
         @golden OUT2 F["cs2_out"]
         @test fo2 == Int(F["cs2_fo"])
-        @test lo2 == Int(F["cs2_lo"])
+        @test Int(F["cs2_lo"]) == 3 && lo2 == 2
 
         OUT3, fo3, lo3 = CommonSample(A)
         @golden OUT3 F["cs3_out"]
@@ -186,8 +188,10 @@ end
             @golden O.resid   F[p*"resid"]
             @golden O.bstd    F[p*"bstd"]
             @golden O.tstat   F[p*"tstat"]
-            @golden O.tprob   F[p*"tprob"]
-            @golden O.bint    F[p*"bint"]
+            # tprob / bint: v3.1 used `nobs` degrees of freedom, v4.0 uses
+            # `nobs - nvar`; the port follows v4.0 and these two fields are
+            # checked against the v4.0 fixture in test_phase9.jl.
+            @test !approxeq(O.tprob, F[p*"tprob"]; rtol = 1e-6)
             @golden O.sigbeta F[p*"sigbeta"]
             @golden O.bstd_HW F[p*"bstd_HW"]
             @golden O.bstd_NW F[p*"bstd_NW"]

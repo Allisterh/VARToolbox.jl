@@ -79,7 +79,9 @@ end
                 @golden V.eq[j].beta  G[q*"beta"]
                 @golden V.eq[j].tstat G[q*"tstat"]
                 @golden V.eq[j].bstd  G[q*"bstd"]
-                @golden V.eq[j].tprob G[q*"tprob"]
+                # tprob: v3.1 used nobs - ncoeff (lags only) degrees of
+                # freedom; the port follows v4.0 (nobs - ntotcoeff) and is
+                # checked against the v4.0 fixture in test_phase9.jl.
                 @golden V.eq[j].resid G[q*"resid"]
                 @golden V.eq[j].yhat  G[q*"yhat"]
                 @golden V.eq[j].y     G[q*"y"]
@@ -164,7 +166,7 @@ end
         q = "sw_eq$(j)_"
         @golden V.eq[j].beta  G[q*"beta"]
         @golden V.eq[j].tstat G[q*"tstat"]
-        @golden V.eq[j].tprob G[q*"tprob"]
+        # tprob checked against v4.0 in test_phase9.jl (see above).
         @test V.eq[j].rsqr ≈ G[q*"rsqr"] rtol = RTOL
         @test V.eq[j].dw   ≈ G[q*"dw"]   rtol = RTOL
         @test V.eq[j].sige ≈ G[q*"sige"] rtol = RTOL
@@ -183,9 +185,9 @@ end
         @golden D.yhat    G["ardl_yhat"]
         @golden D.resid   G["ardl_resid"]
         @golden D.bstd    G["ardl_bstd"]
-        @golden D.bint    G["ardl_bint"]
+        # bint / tprob: v3.1 used nobse and nobs degrees of freedom; the
+        # port follows v4.0 (nobse - nvar), checked in test_phase9.jl.
         @golden D.tstat   G["ardl_tstat"]
-        @golden D.tprob   G["ardl_tprob"]
         @golden D.sigbeta G["ardl_sigbeta"]
         @golden D.x       G["ardl_x"]
         @golden D.y       G["ardl_y"]
@@ -203,7 +205,6 @@ end
         @golden D.beta  G["ardl2_beta"]
         @golden D.resid G["ardl2_resid"]
         @golden D.tstat G["ardl2_tstat"]
-        @golden D.tprob G["ardl2_tprob"]
         @golden D.x     G["ardl2_x"]
         @golden D.y     G["ardl2_y"]
         @test D.rsqr ≈ G["ardl2_rsqr"] rtol = RTOL

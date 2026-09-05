@@ -122,12 +122,13 @@ named `VAR.eq1`, `VAR.eq2`, … through 11 `eval` calls, and is read back by
 `VARprint.m` through 5 more. A typed vector removes all 16 while keeping the
 access pattern recognisable.
 
-!!! note "`tprob` uses different degrees of freedom from `OLSmodel`"
-    `VARmodel` recomputes `tprob` as `tdis_prb(tstat, nobs - ncoeff)`, where
-    `ncoeff = nvar*nlag` — i.e. it counts only the lag coefficients,
-    excluding the constant and any exogenous regressors. `OLSmodel` reports
-    `tdis_prb(tstat, nobs)`. Both are upstream behaviour; they disagree, and
-    the `VARmodel` value is the one carried here.
+!!! note "`tprob` uses the residual degrees of freedom (upstream v4.0 fix)"
+    `VARmodel` computes `tprob` as `tdis_prb(tstat, nobs - ntotcoeff)`,
+    where `ntotcoeff` counts the lag coefficients *and* the deterministics
+    and exogenous regressors. VAR Toolbox 3.1 used `nobs - ncoeff` — lags
+    only — which overstated significance in any model with a constant, a
+    trend or exogenous terms; v4.0 lists this as a critical fix
+    (`ChangeLog.md`, v4.0 release). This port follows v4.0.
 """
 struct EquationResult
     beta::Vector{Float64}
@@ -288,8 +289,9 @@ function VARmodel(ENDO::AbstractMatrix, nlag::Integer, const_::Integer = 1,
     for j in 1:nvar
         yv = Y[:, j]
         O = OLSmodel(yv, X, 0)
-        # Recomputed with nobse - ncoeff dof, NOT OLSmodel's nobs. Upstream.
-        tprob = tdis_prb(O.tstat, nobse - ncoeff)
+        # Residual degrees of freedom (v4.0 fix). v3.1 used `nobse - ncoeff`,
+        # i.e. it forgot the deterministic and exogenous regressors.
+        tprob = tdis_prb(O.tstat, nobse - ntotcoeff)
         eqs[j] = EquationResult(O.beta, O.tstat, O.bstd, tprob, O.resid,
                                 O.yhat, yv, O.rsqr, O.rbar, O.sige, O.dw)
     end

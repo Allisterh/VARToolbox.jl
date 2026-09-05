@@ -89,12 +89,16 @@ linear trend.
     guaranteed dimension-mismatch crash, this port throws an explicit
     error naming the upstream defect.
 
-!!! note "Degrees of freedom in `tprob`"
-    `tstat`'s p-values and the `bint` critical value both use `nobs`
-    degrees of freedom, not `nobs - nvar`. That is upstream's choice and is
-    replicated. [`VARmodel`](@ref) recomputes its own `tprob` with the
-    correct `nobs - ncoeff`, so the per-equation `tprob` inside a fitted VAR
-    differs from what `OLSmodel` alone reports.
+!!! note "Degrees of freedom in `tprob` and `bint` (upstream v4.0 fix)"
+    `tprob` and the `bint` critical value use the residual degrees of
+    freedom `nobs - nvar`, the same denominator as `sige`. VAR Toolbox 3.1
+    used `nobs` for both, so its intervals were too narrow and its p-values
+    too small relative to the stated residual variance; v4.0 corrected this
+    (`ChangeLog.md`, 2026-08-16: "`ols.m` and `OLSmodel.m` reported different
+    intervals for identical inputs. Both now use `nobs-nvar`"). This port
+    follows v4.0. [`VARmodel`](@ref) recomputes its per-equation `tprob`
+    with its own residual degrees of freedom, `nobs - ntotcoeff`, which
+    coincides with this once the deterministics are counted.
 """
 function OLSmodel(y::AbstractVector, x::AbstractMatrix, const_::Integer = 1)
     nobs = length(y)
@@ -139,10 +143,14 @@ function OLSmodel(y::AbstractVector, x::AbstractMatrix, const_::Integer = 1)
 
     tmp = sige .* diag(xpxi)
     sigb = sqrt.(tmp)
-    tcrit = -tdis_inv(0.025, nobs)
+    # Residual degrees of freedom (v4.0); v3.1 used `nobs` here.
+    tcrit = -tdis_inv(0.025, nobs - nvar)
     bint = hcat(beta .- tcrit .* sigb, beta .+ tcrit .* sigb)
     tstat = beta ./ sqrt.(tmp)
-    tprob = tdis_prb(tstat, nobs)
+    # OLSmodel.m (v4.0) guards `tdis_prb` against non-finite t-statistics
+    # because MATLAB's `betainc` errors on NaN; Julia's `_betainc` returns
+    # NaN, so the guard is unnecessary here. Documented for parity.
+    tprob = tdis_prb(tstat, nobs - nvar)
 
     bstd_HW = _hac_std(resid, X, xpxi, nobs, nvar, 0)
     bstd_NW = _hac_std(resid, X, xpxi, nobs, nvar, floor(Int, 4 * ((nobs / 100)^(2 / 9))))

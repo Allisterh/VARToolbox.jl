@@ -137,28 +137,36 @@ end
 end
 
 @testset "Phase 5 -- LPmodel without LAGS" begin
+    # v3.1 built the deterministic block only inside VARmakexy(LAGS,...), so
+    # with LAGS absent the projection had NO intercept whatever const_ said
+    # (the v3.1 fixture lp3_* records that regression). v4.0 always builds
+    # the deterministics; the port follows v4.0 and is checked against the
+    # v4.0 fixture in test_phase9.jl. Here: the v3.1 no-intercept fit is
+    # NOT reproduced, const_ = 0 recovers it, and const_ now matters.
     opt = LPoption()
     opt = @set opt.nsteps = Int(Q["lp3_nsteps"])
     opt = @set opt.nlag = 4
     opt = @set opt.const_ = 1
     opt = @set opt.LAGS = nothing
     IR, INF, SUP, LPout = LPmodel(ENDO5, S5, opt)
-    @golden IR  Q["lp3_IR"]
-    @golden INF Q["lp3_INF"]
-    @golden SUP Q["lp3_SUP"]
-    @test LPout.ntotcoeff == Int(Q["lp3_ntotcoeff"])
-    @golden LPout.h[1].beta Q["lp3_h1_beta"]
+    @test LPout.ntotcoeff == Int(Q["lp3_ntotcoeff"])   # 2: shock + constant
     @test LPout.h[1].nobs == Int(Q["lp3_h1_nobs"])
+    @test size(LPout.h[1].x, 2) == 2                   # shock AND constant
+    @test all(LPout.h[1].x[:, 2] .== 1.0)
+    @test !approxeq(IR, Q["lp3_IR"]; rtol = 1e-6)
 
-    @testset "no intercept when LAGS is absent" begin
-        # The constant enters only through VARmakexy on LAGS. With no LAGS
-        # the projection has no intercept at all, whatever const_ says.
-        @test size(LPout.h[1].x, 2) == 1        # the shock, and nothing else
-        # ...and const_ genuinely does not change the fit.
-        o2 = @set opt.const_ = 0
-        IR2, _, _, _ = LPmodel(ENDO5, S5, o2)
-        @test approxeq(IR2, IR)
-    end
+    o0 = @set opt.const_ = 0
+    IR0, INF0, SUP0, LP0 = LPmodel(ENDO5, S5, o0)
+    @golden IR0  Q["lp3_IR"]                           # v3.1's regression was this one
+    @golden INF0 Q["lp3_INF"]
+    @golden SUP0 Q["lp3_SUP"]
+    @golden LP0.h[1].beta Q["lp3_h1_beta"]
+    @test size(LP0.h[1].x, 2) == 1
+
+    o2 = @set opt.const_ = 2
+    _, _, _, LP2 = LPmodel(ENDO5, S5, o2)
+    @test size(LP2.h[1].x, 2) == 3                     # shock, constant, trend
+    @test LP2.h[1].x[:, 3] == collect(1.0:LP2.h[1].nobs)
 end
 
 @testset "Phase 5 -- LPmodel with EXOG" begin

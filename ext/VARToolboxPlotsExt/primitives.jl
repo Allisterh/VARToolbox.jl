@@ -174,8 +174,14 @@ _round_half_away(x) = round(Int, x, RoundNearestTiesAway)
 Pure transliteration of Figure/DatesPlot.m: tick positions on a `1:nobs`
 axis, year labels, and the `(0, nobs+1)` x-limits it imposes. Kept separate
 from the mutating [`DatesPlot!`](@ref) so it can be unit-tested against
-MATLAB output. Note upstream's monthly step is the literal `0.0833`, not
-`1/12`.
+MATLAB output.
+
+The monthly branch follows VAR Toolbox 4.0, which replaced 3.1's literal
+`0.0833` step with exact `1/12` arithmetic and `round`-based month parsing
+(`ChangeLog.md`, v4.0 release, `Figure/DatesPlot.m`). Under 3.1 the
+accumulated `0.0833` drift made every monthly tick position fractional
+(12.0048, 24.0048, ...) and MATLAB floored them, with a console warning,
+when indexing the label vector.
 """
 function _date_ticks(fo::Real, nobs::Integer, nticks::Real, frequency::AbstractString = "q")
     frequency in ("y", "q", "m") ||
@@ -195,9 +201,9 @@ function _date_ticks(fo::Real, nobs::Integer, nticks::Real, frequency::AbstractS
         idx = tick:tick:tick_max
         positions = collect(Float64, idx)
         labels = labyear[collect(idx)]
-    else
-        step = frequency == "q" ? 0.25 : 0.0833
-        per = frequency == "q" ? 4 : 12
+    elseif frequency == "q"
+        step = 0.25
+        per = 4
         # DatesPlot.m accumulates the last observation with a loop; replicate
         # so float error matches.
         lo = fo
@@ -205,11 +211,10 @@ function _date_ticks(fo::Real, nobs::Integer, nticks::Real, frequency::AbstractS
             lo += step
         end
         fo_year = floor(fo)
-        offs = frequency == "q" ? 0.75 : 0.9167
-        fo_diff = abs(fo - fo_year - offs) / step + 1
+        fo_diff = abs(fo - fo_year - 0.75) / step + 1
         labyear = floor.(collect(fo:step:lo))
         nobslabyear = length(labyear)
-        lo_year = (lo - floor(lo) == offs) ? floor(lo) + 1 : floor(lo)
+        lo_year = (lo - floor(lo) == 0.75) ? floor(lo) + 1 : floor(lo)
         nobs_year = lo_year - fo_year + 1
         tick = _round_half_away(nobs_year / nticks)
         if floor(nticks) == nticks
@@ -225,6 +230,27 @@ function _date_ticks(fo::Real, nobs::Integer, nticks::Real, frequency::AbstractS
         labyear = vcat(labyear, labyear_new)
         positions = collect(fo_diff:(tick * per):tick_max)
         labels = labyear[_round_half_away.(positions)]
+    else
+        # Monthly, v4.0: exact 1/12 arithmetic throughout.
+        per = 12
+        lo = fo + (nobs - 1) / 12
+        fo_year = floor(fo)
+        fo_diff = 12 - _round_half_away(12 * (fo - fo_year))
+        lo_year = _round_half_away(12 * (lo - floor(lo))) == 11 ? floor(lo) + 1 : floor(lo)
+        labyear = floor.(collect(fo:(1/12):lo))
+        nobslabyear = length(labyear)
+        nobs_year = lo_year - fo_year + 1
+        tick = _round_half_away(nobs_year / nticks)
+        if floor(nticks) == nticks
+            tick_max = floor(Int, nticks) * (tick * per)
+        else
+            tick_max = floor(Int, nticks) * (tick * per) + tick * per
+        end
+        lo_new = lo + (tick_max - nobslabyear) / 12
+        labyear_new = floor.(collect((lo + 1/12):(1/12):lo_new))
+        labyear = vcat(labyear, labyear_new)
+        positions = collect(Float64, fo_diff:(tick * per):tick_max)
+        labels = labyear[Int.(positions)]
     end
 
     return positions, string.(Int.(labels)), (0.0, nobs + 1.0)

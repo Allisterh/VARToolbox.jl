@@ -123,7 +123,18 @@ required sign of variable `i`'s response to shock `j`. When `SIGN` has fewer
 columns than rows, the leading shocks are taken as already identified (see
 [`SR`](@ref) for combining with an external instrument).
 
-Returns `nothing` when the rotation budget is exhausted.
+Returns `nothing` when the rotation budget is exhausted. Exactly
+`VARopt.sr_rot` rotations are attempted.
+
+!!! note "Rotation budget off-by-one (upstream v4.0 fix)"
+    VAR Toolbox 3.1 incremented its rotation counter *before* testing it
+    against `sr_rot`, so at most `sr_rot - 1` rotations were tried and
+    `sr_rot = 1` returned `[]` unconditionally — `SR` then treated every
+    call as a rejection and cycled until the `sr_draw` budget aborted with
+    a misleading "restrictions too tight" message. v4.0 tests the budget
+    first (`ChangeLog.md`, 2026-08-16); this port follows v4.0. The draw
+    sequence is unchanged whenever the restrictions are met within the
+    budget, so recorded MATLAB draws still replay exactly.
 
 !!! warning "Budget exhaustion is silent upstream"
     `SignRestrictions.m` sets `flag = 1` and returns `[]` when it exceeds
@@ -167,11 +178,19 @@ function SignRestrictions(SIGN::AbstractMatrix, VAR::VARModel, VARopt::VAROption
         throw(DimensionMismatch("Biv and SIGN must have coherent sizes"))
 
     orderIndices = collect(1:dy)
-    counter = 1
+    counter = 0
     flag = 0
     termaa = zeros(dy, dy)
 
     while true
+        # v4.0: test the budget BEFORE building the rotation, so exactly
+        # sr_rot rotations are attempted (v3.1 attempted sr_rot - 1).
+        if counter >= VARopt.sr_rot
+            flag = 1
+            break
+        end
+        counter += 1
+
         if whereToStart > 1
             C = Matrix(cholesky(Symmetric(sigma)).L)
             q = C \ Biv
@@ -183,12 +202,6 @@ function SignRestrictions(SIGN::AbstractMatrix, VAR::VARModel, VARopt::VAROption
             startingMat = C * q
         else
             startingMat = Matrix(cholesky(Symmetric(sigma)).L)
-        end
-
-        counter += 1
-        if counter > VARopt.sr_rot
-            flag = 1
-            break
         end
 
         termaa = copy(startingMat)
@@ -245,9 +258,9 @@ Result of [`SR`](@ref).
 `(nvar × nvar × ndraws)`. The `med`/`inf`/`sup` fields are the pointwise
 median and `VARopt.pctg` band across draws.
 
-!!! danger "`IR`, `VD` and `HD` do not correspond to `B`"
-    See the discussion in [`SR`](@ref). `B` is one accepted draw; `IR`, `VD`
-    and `HD` are computed from the *next* one.
+`IR`, `VD` and `HD` are computed from the same accepted draw as `B` unless
+`SR` was called with `fix_draw_index = false` (the VAR Toolbox 3.1
+behaviour); see [`SR`](@ref).
 """
 Base.@kwdef struct SROutput
     IRall::Array{Float64,4}
@@ -269,7 +282,7 @@ end
 
 """
     SR(VAR, SIGN, VARopt; rng=Random.default_rng(), src=nothing,
-       post_draws=nothing, fix_draw_index=false) -> SROutput
+       post_draws=nothing, fix_draw_index=true) -> SROutput
 
 Sign-restriction identification. Collects `VARopt.ndraws` accepted rotations
 and returns impulse responses, variance decompositions and historical
@@ -283,42 +296,43 @@ When `VARopt.sr_mod == 1` (the default) each draw also redraws `F` and
 model *and* identification uncertainty. Set `sr_mod = 0` to hold the
 estimated model fixed.
 
+!!! note "Posterior draws carry their own residuals (upstream v4.0 fix)"
+    Under `sr_mod == 1` the residuals of each drawn model are recomputed as
+    `Y - X*Ft_draw`, so the historical decomposition of a draw uses the
+    innovations implied by that draw's coefficients and `HD.endo`
+    reconstructs the data. VAR Toolbox 3.1 replaced `Ft`, `F`, `Fcomp` and
+    `sigma` but left `resid` at the OLS point estimate, mixing drawn
+    dynamics with point-estimate innovations (`ChangeLog.md`, 2026-08-16,
+    `SR.m`); this port follows v4.0. `Ball`, `IRall`, `VDall` and every
+    band are unaffected — they depend only on the drawn `F` and `sigma`.
+
 !!! warning "Throws when the draw budget is exhausted"
     If `VARopt.sr_draw` total draws pass without collecting `ndraws`
     accepted rotations, this raises. That means the restrictions are too
     tight, not that anything is broken — loosen `SIGN`, reduce `sr_hor`, or
     raise `sr_draw`.
 
-!!! danger "Upstream off-by-one: `SRout.B` and `SRout.IR` are different draws"
-    `SR.m` stores each draw's model under a label built from `jj` **before**
-    `jj` is incremented, so accepted draw `k` is filed under `"draw\$(k-1)"`.
-    At the end it selects `sel` — the accepted draw whose `B` is closest to
-    the median — and reads back `VAR_draw.("draw\$sel")`, which is draw
-    `sel+1`.
+!!! note "`SRout.IR`/`VD`/`HD` correspond to `SRout.B` (upstream v4.0 fix)"
+    VAR Toolbox 3.1's `SR.m` stored each draw's model under a label built
+    from `jj` **before** `jj` was incremented, so accepted draw `k` was
+    filed under `"draw\$(k-1)"`, while the final lookup used `sel` directly:
+    `SRout.IR`, `SRout.VD` and `SRout.HD` were computed from the accepted
+    draw *after* the one `SRout.B` came from (verified in MATLAB on
+    Stock-Watson data: `B` was draw 24, `IR` matched draw 25 exactly), and
+    `sel == ndraws` crashed on a missing field. This port found and
+    reported the defect; v4.0 `SR.m` now reads `"draw\$(sel-1)"`, and the
+    default here matches v4.0. Pass `fix_draw_index = false` to reproduce
+    the v3.1 mapping (used by the golden-master tests against v3.1
+    fixtures).
 
-    The consequence is that **`SRout.IR`, `SRout.VD` and `SRout.HD` are
-    computed from a different rotation than `SRout.B`**. Verified against
-    MATLAB on Stock-Watson data with `sr_mod = 0`: `SRout.B` was accepted
-    draw 24 while `SRout.IR` matched draw 25 exactly.
-
-    There is also a latent crash: when `sel == ndraws`, the label
-    `"draw\$ndraws"` was never created and MATLAB errors on a non-existent
-    field. It happens with probability roughly `1/ndraws` per call.
-
-    Replicated by default, per the port's replicate-and-document policy, so
-    that golden-master comparison is meaningful. **Pass
-    `fix_draw_index = true` to use the draw that actually corresponds to
-    `B`** — which is almost certainly what you want for real work, and which
-    also removes the crash.
-
-The `med`/`inf`/`sup` bands are unaffected by the off-by-one: they are
-computed from `IRall`/`VDall` across all draws.
+The `med`/`inf`/`sup` bands are unaffected either way: they are computed
+from `IRall`/`VDall` across all draws.
 """
 function SR(VAR::VARModel, SIGN::AbstractMatrix, VARopt::VAROptions;
             rng::AbstractRNG = Random.default_rng(),
             src::Union{Nothing,DrawSource} = nothing,
             post_draws = nothing,
-            fix_draw_index::Bool = false)
+            fix_draw_index::Bool = true)
 
     src === nothing && (src = DrawSource(rng = rng))
 
@@ -367,6 +381,9 @@ function SR(VAR::VARModel, SIGN::AbstractMatrix, VARopt::VAROptions;
             VARd = @set VARd.F = F_draw
             VARd = @set VARd.Fcomp = Fcomp_draw
             VARd = @set VARd.sigma = sigma_draw
+            # v4.0 (SR.m): the drawn model carries its own innovations.
+            # v3.1 left `resid` at the OLS point estimate.
+            VARd = @set VARd.resid = VAR.Y - VAR.X * Ft_draw
         end
 
         B = SignRestrictions(SIGN, VARd, opt; src = src)
@@ -408,16 +425,16 @@ function SR(VAR::VARModel, SIGN::AbstractMatrix, VARopt::VAROptions;
     VDmed = dropdims(median(VDall, dims = 4), dims = 4)
     VDb = _prctile(VDall, [pctg_inf, pctg_sup], 4)
 
-    # Replicates SR.m's lookup: `VAR_draw.('draw' + sel)`, which is the draw
-    # AFTER the one `sel` indexes in Ball. `fix_draw_index=true` corrects it.
+    # v4.0 SR.m reads `VAR_draw.('draw' + (sel-1))`, the draw B came from.
+    # v3.1 read `'draw' + sel`, the draw AFTER it; `fix_draw_index=false`
+    # reproduces that mapping for comparison against v3.1 fixtures.
     key = fix_draw_index ? sel - 1 : sel
     haskey(VAR_draw, key) || error(
-        "SR: no stored draw for index $key. This reproduces an upstream " *
-        "defect in SR.m -- it labels stored draws by the accepted count " *
+        "SR: no stored draw for index $key. This reproduces the VAR Toolbox " *
+        "3.1 defect in SR.m -- it labelled stored draws by the accepted count " *
         "before incrementing it, so the label for the last accepted draw " *
-        "is never created and `sel == ndraws` reads a missing field. " *
-        "Pass fix_draw_index=true to use the draw that actually " *
-        "corresponds to SRout.B.")
+        "was never created and `sel == ndraws` read a missing field. " *
+        "Use the default fix_draw_index=true.")
     VARsel = VAR_draw[key]
 
     IR, _ = VARir(VARsel, opt)

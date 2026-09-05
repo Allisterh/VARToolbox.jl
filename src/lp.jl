@@ -157,12 +157,17 @@ At horizon `h` the regression is `y[t+h-1] ~ shock[t] + EXOG[t] + lags`, so
 `LPopt.impact = 0` standardises `S` (z-score, `n-1` denominator) so the
 response is to a one-standard-deviation shock; `impact = 1` uses `S` as is.
 
-!!! note "Where the constant comes from"
-    The per-horizon regression is run with `OLSmodel(Y, X, 0)` — **no
-    constant added**. A constant enters only through the lag block, which is
-    built by `VARmakexy(LAGS, nlag, const_)`. So if `LPopt.LAGS` is
-    `nothing`, the projection has **no intercept at all**, whatever
-    `const_` says. Upstream behaviour, preserved.
+!!! note "Deterministics are always included (upstream v4.0 fix)"
+    The per-horizon regression is run with `OLSmodel(Y, X, 0)`. When
+    `LPopt.LAGS` is set, the constant (and trend, for `const_ = 2`) enters
+    through the lag block built by `VARmakexy(LAGS, nlag, const_)`, exactly
+    as in VAR Toolbox 3.1. When `LPopt.LAGS` is `nothing`, 3.1 built no
+    deterministic block at all — the projection silently had **no
+    intercept**, although `ntotcoeff` counted one. v4.0 builds the
+    deterministic block explicitly in every case (`ChangeLog.md`, v4.0
+    release, `LPmodel.m`); this port follows v4.0, appending
+    `[1 t]`-type columns after `EXOG` when `LAGS` is absent. Results with
+    `LAGS` set are unchanged.
 
 !!! warning "Bands are Normal, not bootstrapped, and use White errors"
     `INF`/`SUP` are `IR ± z * bstd_HW[1]` with `z` the Normal quantile at
@@ -216,10 +221,17 @@ function LPmodel(ENDO::AbstractMatrix, S::AbstractMatrix, LPopt::LPOptions = LPo
         s = S[(1+nlag):end, 1]
         exog = nvarEXOG > 0 ? Matrix{Float64}(EXOG[(1+nlag):end, :]) : zeros(length(endo), 0)
     else
-        lags = zeros(nobsENDO, 0)
+        # v4.0: the deterministic block no longer depends on LAGS being
+        # present. Same column convention as VARmakexy: [1], [1 t], [1 t t^2].
         endo = ENDO[:, 1]
         s = S[:, 1]
         exog = nvarEXOG > 0 ? Matrix{Float64}(EXOG) : zeros(nobsENDO, 0)
+        t = collect(1.0:nobsENDO)
+        lags = constant == 0 ? zeros(nobsENDO, 0) :
+               constant == 1 ? ones(nobsENDO, 1) :
+               constant == 2 ? hcat(ones(nobsENDO), t) :
+               constant == 3 ? hcat(ones(nobsENDO), t, t .^ 2) :
+               throw(ArgumentError("LPmodel: const_ must be 0, 1, 2 or 3 (got $constant)"))
     end
 
     if impact == 0

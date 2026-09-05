@@ -80,15 +80,21 @@ end
     @test pos3 == [4.0, 8.0, 12.0, 16.0, 20.0]
     @test labs3 == ["2003", "2007", "2011", "2015", "2019"]
     @test lims3 == (0.0, 21.0)
-    # Case 4 -- monthly. Upstream's literal 0.0833 step (not 1/12) makes
-    # fo_diff -- and so every tick position -- fractional: MATLAB places
-    # ticks at 12.0048, 24.0048, ... and floors them when indexing the
-    # label vector (with a console warning). Both are replicated.
-    pos4, labs4, _ = EXT._date_ticks(1965.0, 100, 8, "m")
-    @test length(pos4) == 7
-    @test pos4 ≈ [12.0048, 24.0048, 36.0048, 48.0048, 60.0048, 72.0048,
-                  84.0048] atol = 1e-3
-    @test labs4 == ["1965", "1966", "1967", "1968", "1969", "1970", "1971"]
+    # Case 4 -- monthly. v3.1's literal 0.0833 step made every tick
+    # position fractional (12.0048, 24.0048, ...; MATLAB floored them with
+    # a console warning). v4.0 uses exact 1/12 arithmetic; the port follows
+    # v4.0 and is compared against MATLAB v4.0's actual axis ticks and
+    # labels, recorded by gen_phase9.m for four start-month / length
+    # combinations.
+    F9m = fixture("phase9")
+    for k in 1:4
+        p = "dp$(k)_"
+        pos, labs, lims = EXT._date_ticks(F9m[p*"fo"], Int(F9m[p*"nobs"]),
+                                          Int(F9m[p*"nticks"]), "m")
+        @test pos == vec(F9m[p*"xt"])
+        @test labs == string.(Int.(vec(F9m[p*"xl"])))
+        @test lims == Tuple(vec(F9m[p*"xlim"]))
+    end
     @test_throws ErrorException EXT._date_ticks(2000.0, 20, 5, "w")
 end
 

@@ -34,6 +34,7 @@ const GENERATORS = Dict(
     "phase5" => "gen_phase5.m",
     "phase6" => "gen_phase6.m",
     "phase7" => "gen_phase7.m",
+    "phase9" => "gen_phase9.m",
 )
 
 function sha256_file(path)
@@ -69,6 +70,8 @@ function main()
     println(io, "updated = \"", Dates.format(Dates.now(), "yyyy-mm-dd"), "\"")
     println(io, "matlab = \"R2026a Update 3 (26.1.0.3276743)\"")
     println(io, "source_commit = \"7695feb9c72812e6f6f08c1288ccc8b927af0aa7\"")
+    # phase9.mat alone is generated from VAR Toolbox 4.0 (fork dir v4dot0/):
+    println(io, "source_commit_v4dot0 = \"36e706a0b6af6a6a901ce7084e5502ab71b75f42\"")
     println(io)
 
     for m in mats

@@ -772,6 +772,162 @@ of error the figure-replication exercise exists to catch.
 
 ---
 
+## Phase 9 — re-sync against upstream v4.0 (September 2026)
+
+**What happened upstream.** Ambrogio Cesa-Bianchi released **VAR Toolbox
+4.0** on 2026-06-27 (`0ed54ea`) and a follow-up commit "Fixed a few minor
+bugs" on 2026-08-18 (`36e706a0b6af6a6a901ce7084e5502ab71b75f42`), rewriting
+the repository's history and flattening its tree (`VAR/`, `Stats/`, … at the
+root; no more `v3dot1/`). The fork now carries that tree as `v4dot0/` (a
+git subtree of `upstream/main`), leaving `v3dot1/` — the source of this
+port and of every v3.1 fixture — byte-unchanged.
+
+**What v4.0 is.** An API redesign, not a patch release. `VARmodel` takes
+`VARopt` as its fourth input and performs identification and bootstrap
+inference itself; `VARir`, `VARvd`, `VARhd`, `VARirband`, `VARvdband` no
+longer exist (their kernels became `compute_wold`/`compute_IR`/`compute_VD`/
+`compute_HD`/`recover_B`); sign-restricted and bootstrap outputs are renamed
+(`Bfp`, `IRfp`, `IRbar`, …); `LPmodel` is rewritten around `TREAT`/`CTRL`
+with LP-IV; `const = 3` is removed; `VARopt.sr_mod` becomes
+`VARopt.inference`; there are new features (moving block bootstrap,
+single-pass `sign+iv`, narrative sign restrictions, `exoshock`, `VARlag`)
+and a new colour palette. **None of that is ported.** This package keeps
+the v3.1 API; a v4-API port would be a separate project.
+
+**What was done instead.** `v4dot0/ChangeLog.md` was read entry by entry
+and each item classified: (a) a fix to a computation v3.1 and this port
+share → adopted; (b) an API or feature change → not adopted; (c) a fix to
+code this port never carried → not applicable. The (a) items are below.
+This is the "later, separate, deliberate PR" that D2 reserved for
+divergence, and it is validated the same way the original port was: by
+golden master against the *fixed* MATLAB code.
+
+### Validation: `phase9.mat`, generated from v4.0
+
+`test/fixtures/gen/gen_phase9.m` drives the **v4.0** tree (`v4dot0/`) — the
+only generator that does — on the same inputs as the v3.1 fixtures (it
+loads `A`, `N`, `E`, `SW`, `gk_ENDO`, `gk_IV` back out of `phase1..5.mat`),
+and records, for every adopted fix that has a numerical output, what v4.0
+computes. `test/test_phase9.jl` compares the port against it at
+`rtol = 1e-10` (`1e-6` for the ill-conditioned Gertler-Karadi IV block, as
+before). Fixes with no numerical output — control flow, guards, rejected
+option combinations — are pinned by property tests in the same file.
+
+The v3.1 fixtures were **not** regenerated. Where a test in
+`test_phase1..8.jl` used to pin a since-fixed value, it now asserts the
+port does *not* reproduce it (with the v3.1 value still read from the
+fixture, so the assertion cannot pass vacuously), and points at the Phase 9
+test that pins the corrected value. Everything the fixes do not touch is
+still compared against v3.1 exactly, which is itself a useful check that
+each fix is as narrow as claimed: all four replications (Stock-Watson,
+Blanchard-Quah, Uhlig, Gertler-Karadi) still agree with their v3.1 fixtures
+at the original tolerances.
+
+### Adopted fixes
+
+| # | where | v3.1 defect (replicated until now) | v4.0 fix, adopted | effect on v3.1 fixtures | pinned by |
+|---|---|---|---|---|---|
+| 1 | `OLSmodel` | `tprob` and the `bint` critical value used `nobs` degrees of freedom while `sige` divides by `nobs - nvar` | `nobs - nvar` for both | `ols_c*_tprob/bint` no longer match (asserted) | phase9 golden, 3 configurations |
+| 2 | `VARmodel` | per-equation `tprob` used `nobse - ncoeff` — lag coefficients only, forgetting deterministics and exogenous regressors; overstated significance in any model with a constant | `nobse - ntotcoeff` (v4.0 "critical" fix) | `*_eq*_tprob` removed from phase 2 goldens | phase9 golden: 5 synthetic, 3 EXOG, Stock-Watson; `const = 3` (kept, see below) checked by formula |
+| 3 | `ARDLmodel` | `bint` used `nobse`, `tprob` used the *raw* `nobs`; the two disagreed with each other and with `sige` | `nobse - nvar` for both | `ardl*_tprob/bint` removed from phase 2 goldens | phase9 golden |
+| 4 | `CommonSample` | `lo` counted every NaN row outside the leading run (no `break`); empty input raised | `lo` = trailing run; empty in, empty out | `cs_lo` = 3 no longer reproduced (asserted); `cs_out`, `fo` unchanged | phase9 golden + property tests |
+| 5 | `VARir`, `ident = "iv"` | second-stage residuals taken as the *last* `length(p)` rows — a row count, not a date selection; wrong pairing whenever the instrument has trailing or interior gaps (reported to upstream by a user in 2023) | logical date mask applied identically to `p`, `q`, `Z` | none — GK2015's instrument is missing only at the start; phase 6 still exact | phase9 golden on GK data with trailing, interior, and both gaps (`Biv`, `IR`, `sigma_b`, first stage); non-vacuity check that mask ≠ shortcut |
+| 6 | `VARir`, `shut` | under `recurs = "wold"` the shut variable was zero on impact only — `PSI` is built from the unmodified lag polynomial — so `'wold'` and `'comp'` implemented different counterfactuals | companion recursion whenever `shut != 0` | `ir_short_shut2` no longer reproduced (asserted); `shut = 0` unchanged | phase9 golden, both `recurs` values |
+| 7 | `VARhd` | exogenous contribution read only the contemporaneous coefficient; with `nlag_ex > 0` the lags were dropped and `HD.endo` did not reconstruct the data (PORT_SUMMARY §4.1) | forcing term sums over `kk = 0…nlag_ex`, column `kk*nvar_ex + ii` | none — no v3.1 HD fixture has EXOG | phase9 golden, 4 configurations incl. `const = 2` and `nlag < nlag_ex`; reconstruction identity `< 1e-10` (v4.0 achieves `4e-14`) |
+| 8 | `VARirband`, `wild` + `iv` | `resid .* (rr*ones(nIV,nvar))` with `rr` `nobs × nIV` is a matrix product: the `k` instrument columns' Rademacher signs were *summed* into the residual weight (support `{-2,0,+2}` for `k = 2`) while each instrument column kept its own sign | one weight per observation for the residual row and every instrument column | none — GK2015 has one instrument; phase 4 and 6 still exact and consume the same draws | property test with two instruments: weights ±1, one per row, shared by both instrument columns; `nobs` (not `nobs·k`) uniforms consumed |
+| 9 | `VARirband`, `bs` + `iv` | ran, resampling residual dates independently of the instrument and destroying the identifying pairing (v4.0 measured 55% wrong-signed draws on GK2015) | rejected with an explanatory error | none | `@test_throws`; `bs` under `short`/`long` and `wild` under `iv` still run |
+| 10 | `SignRestrictions` | counter incremented *before* the budget test: at most `sr_rot - 1` rotations; `sr_rot = 1` returned `[]` unconditionally, so `SR` cycled to the `sr_draw` abort | budget tested first; exactly `sr_rot` rotations | none — draw sequence identical whenever the restrictions are met within the budget; phase 3, 3b, 6 recorded draws replay exactly | property tests: a pool of exactly `sr_rot` draws suffices and `sr_rot - 1` does not; `sr_rot = 1` returns a valid `B` |
+| 11 | `SR`, `sr_mod = 1` | posterior draw replaced `Ft`, `F`, `Fcomp`, `sigma` but not `resid`, so `VARhd` used point-estimate innovations with drawn dynamics | `resid = Y - X*Ft_draw` per draw | none — `Ball`, `IR*`, `VD*` depend only on drawn `(F, sigma)`; Uhlig (phase 6) still exact | reconstruction identity on every draw's `HD` |
+| 12 | `SR`, draw index | `SRout.IR/VD/HD` were computed from the accepted draw *after* the one `SRout.B` came from (the port's Phase 3 finding); `sel == ndraws` crashed | v4.0 reads `draw(sel-1)` — upstream adopted the port's finding | phase 3 `SR_IR/VD/HD` goldens now pass `fix_draw_index = false` explicitly | default now corresponds to `B`; both mappings tested; bands identical either way |
+| 13 | `LPmodel`, `LAGS` absent | deterministics were built only inside `VARmakexy(LAGS, …)`, so with no `LAGS` the projection had no intercept although `ntotcoeff` counted one | deterministic block always built | `lp3_*` (v3.1's no-intercept regression) no longer reproduced by default; recovered exactly with `const_ = 0` (asserted) | phase9 golden on the same trimmed sample (`IR`, `beta`, design matrix) for `const_ = 1, 2` |
+| 14 | `MovAvgCent`, `MovCorrCent` | `nobs <= 2·window` gave an empty loop and a silently all-NaN result | explicit error | none | `@test_throws`; MATLAB v4.0 error recorded in the fixture |
+| 15 | `PairCorr` | logs taken unguarded (a literal Julia port throws `DomainError` on a negative level) | warn and skip the log differences; column-wise NaN blanking | none | phase9 golden incl. the degenerate value v4.0 returns, `(0-1)/(n-1)`, which comes from its `sum(…,'omitnan')` (see note) |
+| 16 | `DatesPlot`, monthly | literal `0.0833` step accumulated drift: fractional tick positions (12.0048, …) that MATLAB floored with a warning | exact `1/12` arithmetic, `round`-based month parsing | phase 8 case 4 rewritten | phase9: MATLAB v4.0's actual axis ticks, labels and limits for four start/length combinations |
+
+Two side-findings while doing this:
+
+- **`_corrmat` forced the diagonal to 1.** Julia's `cor(x, x)` short-circuits
+  to `1.0` even for an all-NaN `x`, whereas MATLAB's `corrcoef` gives NaN
+  on the diagonal for a column containing NaN. Only PairCorr's degenerate
+  path exposed it (every other caller discards the diagonal); fixed to match
+  `corrcoef`.
+- **`nansum` vs `sum(…,'omitnan')`.** v4.0 deleted `Auxiliary/nansum.m` and
+  uses the built-in; the two differ only for an all-NaN slice (NaN vs 0).
+  `PairCorr` now uses the built-in semantics, so it reproduces v4.0's odd
+  `-1/(n-1)` in the non-positive-levels case. This package's exported
+  `nansum` keeps the `Auxiliary/` semantics (and its phase 1 fixture).
+
+### Deliberately not adopted
+
+- **The v4.0 API redesign**, in full (see "What v4.0 is"). This includes
+  `VARopt.inference` replacing `sr_mod`, the `Bfp/IRfp/IRbar` renames,
+  `HDbar/HDinf/HDsup` as full structs, `VARopt.exoshock`, `VARopt.IV` (the
+  instrument stays on `VAR.IV` here), and the removal of
+  `VARopt.datesnum/datestxt/datestype`.
+- **New features:** moving block bootstrap (`method = 'mbb'`, with
+  `mbb_blocksize`), single-pass `ident = 'sign+iv'` and its
+  `whereToStart`/`sigma` fixes (the port's two-stage sequence via `Biv` is
+  unchanged), narrative restrictions (`R.narr_sign`, `R.narr_dom`),
+  `recover_B`'s `complete_B` (full-rank `B` under `iv`/`exog`, which is what
+  lets v4.0 compute VD/HD under `iv`; `VARvd`/`VARhd` still reject `iv` and
+  `exog` here as in v3.1), LP-IV and the LP joint Wald test, `VARlag`.
+  `'mbb'` is the natural next addition, since it is upstream's recommended
+  alternative to the now-rejected `bs` + `iv`.
+- **`const = 3` removal.** Upstream removed it because `OLSmodel.m` and
+  `build_LAGplus.m` disagreed with `VARmakexy.m` about what `3` meant. In
+  this port the `VARmodel`/`VARhd`/`VARirband` path for `const = 3`
+  (constant, trend, trend²) is self-consistent and fixture-tested, so it is
+  kept; `OLSmodel(y, x, 3)` still raises as before.
+- **`SR`'s budget accounting.** v4.0 `SR.m` now advances its `sr_draw`
+  counter by the number of rotations `SignRestrictions` attempted
+  (`tt += n_rot`) and reports `accept_rate`/`ndraws_tried`. That redefines
+  `sr_draw` from "calls" to "rotations" (with the default `sr_rot = 500`,
+  the same `sr_draw = 100000` now allows 200 exhausted calls instead of
+  100,000) and is a semantic change rather than a fix; `sr_draw` keeps its
+  v3.1 meaning here.
+- **IV sign normalisation.** v4.0 `recover_B.m` multiplies `Biv` by
+  `sign(FirstStage.beta(2))`, so a positive shock is one that raises the
+  instrument. This is not in `ChangeLog.md`. It is a convention change, not
+  a fix, and is not adopted; `gen_phase9.m` records the sign (`+1` for
+  every Gertler-Karadi case) so the IV comparison is about alignment only.
+  Worth raising upstream as an undocumented behaviour change.
+- **`LPmodel` bands and the `bstd_HW` mislabelling.** v4.0's rewrite uses
+  Newey-West errors with bandwidth `h-1` for the bands and stores both
+  error types correctly. The port still has v3.1's White bands and exposes
+  the swapped field alongside `bstd_White` (Phase 5). Changing the bands is
+  a methodological change bundled with the LP-IV rewrite; deferred.
+- **v4.0 changes to code this port never carried:** `VARlag` (four fixes),
+  `adf`, `ztcrit`, `Auxiliary/ols.m`, `datatreat`, `SummStats`,
+  `PairCorrUnbalanced`, `PlotStatesShaded`, `LegPlot`, `PlotSwathe`'s
+  `'opengl'`, `cmap`'s palette and entry 3, `VARprint`, the Primer and
+  replication scripts, the handbook.
+- **Two `ChangeLog.md` items that do not apply to v3.1:** the
+  `compute_HD` "`HDexo_big` not reset between exogenous variables" fix
+  (in `VARhd.m` 3.1 column 1 of that array is never written and the
+  recursion overwrites every column before reading it, so there was no
+  contamination; the port already allocated per variable) and the
+  `VARhdplot` "wrong slice dimension" fix (v3.1's plotter and the Phase 8
+  port index `HD.shock(:,:,ii)` correctly).
+
+### Open upstream items the port still shares
+
+From the "not addressed" list in v4.0's 2026-08-16 entry, those that touch
+ported code: no stability screen on posterior draws in `SR` (item 7);
+greedy sign-column matching without backtracking in `SignRestrictions`
+(10); `dy - ds > 1` accepted silently (11); no `else` for an unrecognised
+`recurs` in the IR recursion — the response stays zero from horizon 2 (17);
+no attempt cap in the bootstrap when `maxEig >= 0.9999` keeps rejecting
+(22); `nlag_ex > nlag` inconsistently defined (23); `tdis_prb`'s clamp
+assumes a column vector (26); `VAR.Fp`'s third dimension follows `nsteps`,
+not `nlag` (28, noted in Phase 3 here).
+
+### Repository mechanics
+
+`PROVENANCE.md` records the v4.0 commit; `MANIFEST.toml` carries a separate
+`source_commit_v4dot0`; `gen_phase9.m` is the only generator reading
+`v4dot0/`. The fork's `CLAUDE.md` documents the subtree and the merge
+command for future upstream syncs.
+
 ## What remains
 
 Stated plainly rather than left implicit.
@@ -790,7 +946,8 @@ Everything the VAR pipeline itself depends on is ported and validated.
 
 - The `maxEig >= 0.9999` resample-and-retry branch in `VARirband`/
   `VARvdband` is never deliberately triggered by a fixture.
-- `VARvdband` is not tested with an exogenous variable.
+- `VARvdband` is not tested with an exogenous variable (`VARhd` with
+  lagged exogenous variables is, since Phase 9).
 - `LPmodel` is not tested with a multi-column `S`.
 - `VARdrawpost`'s sampling path is checked only for shape and symmetry;
   its distributional correctness is not asserted (the deterministic

@@ -61,8 +61,16 @@ osw = @set osw.nsteps = 12
         o = @set osw.ident = "short"
         o = @set o.shut = 2
         IR, _ = VARir(Vsw, o)
-        @golden IR H["ir_short_shut2"]
+        # v3.1 held the shut variable at zero on impact only under the
+        # default recurs = 'wold' (its fixture shows a non-zero response
+        # from horizon 2). The port follows v4.0 -- companion recursion
+        # whenever shut is active -- and is checked against the v4.0
+        # fixture in test_phase9.jl. Pin that the v3.1 value is NOT
+        # reproduced and that the counterfactual is now what it claims.
         @test all(IR[1, 2, :] .== 0)
+        @test all(IR[:, 2, :] .== 0)
+        @test any(H["ir_short_shut2"][2:end, 2, :] .!= 0)
+        @test !approxeq(IR, H["ir_short_shut2"]; rtol = 1e-6)
     end
 
     @testset "ident = sign without B raises" begin
@@ -289,7 +297,9 @@ end
     o = @set o.sr_mod = 0
     o = @set o.nsteps = Int(H["SR_nsteps"])
 
-    out = SR(Vsw, SIGN, o; src = src)
+    # fix_draw_index = false reproduces the v3.1 draw mapping the fixture
+    # was generated with (see the off-by-one testset below).
+    out = SR(Vsw, SIGN, o; src = src, fix_draw_index = false)
 
     @golden out.Ball  H["SR_Ball"]
     @golden out.Bmed  H["SR_Bmed"]
@@ -308,28 +318,33 @@ end
     @golden out.HD.endo  H["SR_HD_endo"]
     @golden out.HDall[:endo] H["SR_HDall_endo"]
 
-    @testset "upstream off-by-one between B and IR" begin
-        # SR.m labels each stored draw by the accepted count BEFORE
-        # incrementing it, so the model it reads back at the end is the one
+    @testset "v3.1 off-by-one between B and IR, fixed in v4.0" begin
+        # v3.1's SR.m labelled each stored draw by the accepted count BEFORE
+        # incrementing it, so the model it read back at the end was the one
         # AFTER the draw that B came from. Verified in MATLAB: B was
-        # accepted draw 24 while IR matched draw 25 exactly.
+        # accepted draw 24 while IR matched draw 25 exactly. v4.0 reads
+        # draw(sel-1); the port's default does the same.
         selB = Int(H["SR_selB"])
         selIR = Int(H["SR_selIR"])
         @test H["SR_selIRresid"] < 1e-12       # IR really is some draw, exactly
         @test selIR == selB + 1                # and it is the NEXT one
         @test selB != selIR
 
-        # The port reproduces the mismatch by default...
+        # fix_draw_index = false reproduces the v3.1 mismatch...
         @test approxeq(out.B, H["SR_B"])
         @test !approxeq(out.IR, VARir((@set Vsw.B = out.B), (@set osw.ident = "sign"))[1];
                         rtol = 1e-6)
 
-        # ...and fix_draw_index=true makes IR correspond to B.
+        # ...and the default (v4.0 mapping) makes IR correspond to B.
         src2 = DrawSource(normals = drawpool(H["SR_draws"]))
-        fixed = SR(Vsw, SIGN, o; src = src2, fix_draw_index = true)
+        fixed = SR(Vsw, SIGN, o; src = src2)
         @test approxeq(fixed.B, out.B)         # same selected B
+        @test approxeq(fixed.Ball, out.Ball)   # every draw identical
+        @test approxeq(fixed.IRinf, out.IRinf) # bands unaffected
         expected, _ = VARir((@set Vsw.B = fixed.B), (@set osw.ident = "sign"))
         @test approxeq(fixed.IR, expected[1:Int(H["SR_nsteps"]), :, :]; rtol = 1e-9)
+        expectedVD, _ = VARvd((@set Vsw.B = fixed.B), (@set osw.ident = "sign"))
+        @test approxeq(fixed.VD, expectedVD[1:Int(H["SR_nsteps"]), :, :]; rtol = 1e-9)
     end
 
     @testset "bands bracket the median" begin

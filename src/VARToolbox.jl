@@ -1,10 +1,13 @@
 # =======================================================================
 # VARToolbox.jl
 #
-# A Julia port of Ambrogio Cesa-Bianchi's VAR Toolbox for MATLAB (v3.1).
+# A Julia port of Ambrogio Cesa-Bianchi's VAR Toolbox for MATLAB (v3.1),
+# carrying the numerical bug fixes upstream shipped in v4.0 (see
+# PORTING_LOG.md, "Phase 9"). The API is v3.1's; the v4.0 API redesign is
+# not ported.
 #
 # This is a derivative work of GPL-3.0 licensed code and is itself
-# GPL-3.0. See PROVENANCE.md for the upstream commit this was ported from
+# GPL-3.0. See PROVENANCE.md for the upstream commits this was ported from
 # and the reference environment used to generate golden-master fixtures.
 #
 # Design decisions that shape the whole package (see ../DESIGN.md, at the
@@ -17,7 +20,9 @@
 #
 #   D2  Where the MATLAB source is odd, the oddity is reproduced and pinned
 #       with a test rather than silently improved. Every such case carries a
-#       docstring admonition and a PORTING_LOG entry.
+#       docstring admonition and a PORTING_LOG entry. Defects that upstream
+#       has since fixed are adopted deliberately, validated against the
+#       fixed upstream code (test/fixtures/phase9.mat), and logged.
 #
 #   D3  `VAROptions` and `LPOptions` are IMMUTABLE. MATLAB passes structs by
 #       value, and the toolbox relies on that: `SR.m` sets `VARopt.ident =

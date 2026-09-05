@@ -63,10 +63,22 @@ Two carve-outs, both recorded in `PORTING_LOG.md`:
    The fixture records that MATLAB errors here, so the behavioural contract
    ("this input is rejected") is still validated.
 
-Everything else found so far is replicated verbatim: `CommonSample`'s `lo`
-miscount, `nanmedian`'s zero-median-to-NaN conversion, `tdis_prb`'s clamp,
-`tdis_inv`'s precision collapse near `p = 0.5`, `L`'s inverted sign
-convention, `OLSmodel`'s `nobs` degrees of freedom. See `PORTING_LOG.md`.
+Everything else found so far is replicated verbatim: `nanmedian`'s
+zero-median-to-NaN conversion, `tdis_prb`'s clamp, `tdis_inv`'s precision
+collapse near `p = 0.5`, `L`'s inverted sign convention. See
+`PORTING_LOG.md`.
+
+**Upstream fixes are the sanctioned form of divergence.** When upstream
+itself corrects a defect the port had replicated, the port adopts the fix
+(the "later, separate, deliberate PR" above), validates it against the
+*fixed* upstream code — `test/fixtures/phase9.mat` is generated from VAR
+Toolbox 4.0, not 3.1 — and records it in `PORTING_LOG.md` ("Phase 9"). The
+v3.1 fixtures stay in place; tests that used to pin a since-fixed value now
+assert the port no longer reproduces it. Fifteen such fixes were adopted
+from v4.0 in September 2026, among them `CommonSample`'s `lo`, the residual
+degrees of freedom in `OLSmodel`/`VARmodel`/`ARDLmodel`, IV sample
+alignment, `shut`, lagged exogenous terms in `VARhd`, and `SR`'s draw index.
+The v4.0 API redesign is *not* adopted: the port keeps the v3.1 API.
 
 ---
 

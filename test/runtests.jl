@@ -203,4 +203,5 @@ end
     include("test_phase6.jl")
     include("test_phase7.jl")
     include("test_phase8.jl")
+    include("test_phase9.jl")
 end

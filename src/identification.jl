@@ -115,6 +115,28 @@ Set `VARopt.ident` before calling. `VARir` supports all five schemes:
     ordered first in `ENDO`; `VAR.IV` must be set. Reordering `ENDO` changes
     the result.
 
+!!! note "IV sample alignment (upstream v4.0 fix)"
+    The instrument may be `NaN` where it is unobserved. The first- and
+    second-stage regressions and `sigma_b` use exactly the dates at which
+    both the instrument and the residuals are observed, selected by a
+    logical mask. VAR Toolbox 3.1 instead took the *last* `length(p)` rows
+    of the other equations' residuals — a row count, not a date selection —
+    which is correct only when every missing instrument observation is
+    leading. With trailing or interior gaps it silently paired residuals
+    from the wrong dates (`ChangeLog.md`, 2026-08-16, `recover_B.m`). This
+    port follows v4.0; results are bit-identical for leading-only gaps,
+    which includes the shipped Gertler-Karadi replication.
+
+!!! note "`shut` always uses the companion recursion (upstream v4.0 fix)"
+    With `VARopt.shut != 0` the shut variable's equation is zeroed in the
+    companion matrix. Under `recurs = "wold"` VAR Toolbox 3.1 nevertheless
+    propagated the responses with Wold multipliers built from the
+    *unmodified* lag polynomial, so the shut variable was held at zero on
+    impact only and the two `recurs` options implemented different
+    counterfactuals. v4.0 uses the companion recursion whenever `shut` is
+    active, irrespective of `recurs`; `shut = 0` is unaffected. This port
+    follows v4.0.
+
 !!! note "`ident = \"sign\"` requires `B` to be set already"
     Setting `ident = "sign"` by hand is not a working path — it raises.
     Go through [`SR`](@ref), which places `B` for you.
@@ -142,11 +164,15 @@ function VARir(VAR::VARModel, VARopt::VAROptions)
             up = VAR.resid[:, 1]
             uq = VAR.resid[:, 2:end]
 
-            aux, _, _ = CommonSample(hcat(up, VAR.IV[(nlag+1):end, :]))
-            p = aux[:, 1]
-            q = uq[(end-length(p)+1):end, :]
+            # v4.0 (recover_B.m): select DATES, not a row count. The v3.1
+            # shortcut `q = uq(end-length(p)+1:end,:)` is only right when
+            # the instrument's missing observations are all leading.
+            IVtrim = VAR.IV[(nlag+1):end, :]
+            keep = .!vec(any(isnan, hcat(up, IVtrim), dims = 2))
+            p = up[keep]
+            q = uq[keep, :]
+            Z = IVtrim[keep, :]
             pq = hcat(p, q)
-            Z = aux[:, 2:end]
 
             FirstStage = OLSmodel(p, Z)
             p_hat = FirstStage.yhat
@@ -197,11 +223,14 @@ function VARir(VAR::VARModel, VARopt::VAROptions)
         end
         response[:, 1] = B * impulse
         shut != 0 && (response[shut, 1] = 0)
-        if recurs == "wold"
+        # v4.0 (compute_IR.m): PSI is built from the unmodified lag
+        # polynomial, so only the companion recursion honours `shut`.
+        recurs_h = shut != 0 ? "comp" : recurs
+        if recurs_h == "wold"
             for kk in 2:nsteps
                 response[:, kk] = PSI[:, :, kk] * B * impulse
             end
-        elseif recurs == "comp"
+        elseif recurs_h == "comp"
             for kk in 2:nsteps
                 FcompN = Fcomp^(kk - 1)
                 response[:, kk] = FcompN[1:nvar, 1:nvar] * B * impulse
@@ -335,13 +364,14 @@ ordering as [`VARvd`](@ref), not [`VARir`](@ref)'s.
 !!! warning "Only `short`, `long` and `sign` are supported"
     Raises on `ident = "iv"` and on `ident = "exog"`, matching upstream.
 
-!!! warning "Exogenous contributions ignore lags of the exogenous variables"
-    `VARhd.m` builds the exogenous contribution from
-    `F[:, nvar*nlag+const+ii]` only — the *contemporaneous* coefficient on
-    exogenous variable `ii`. When `nlag_ex > 0` the lagged exogenous
-    coefficients are silently omitted, so `HD.exo` does not account for
-    their contribution and `HD.endo` will not reconstruct the data exactly.
-    Upstream defect, replicated.
+!!! note "Exogenous contributions include the lagged exogenous terms (upstream v4.0 fix)"
+    `HD.exo[:, :, ii]` is the contribution of exogenous variable `ii`
+    through its contemporaneous coefficient *and* every included lag
+    (`nlag_ex`), so `HD.endo` reconstructs the data to machine precision
+    for any `nlag_ex`. VAR Toolbox 3.1 read only the contemporaneous
+    coefficient column and silently dropped the lags (`ChangeLog.md`,
+    2026-08-16, `compute_HD.m`); this port follows v4.0. Results are
+    identical for `nlag_ex = 0`.
 """
 function VARhd(VAR::VARModel, VARopt::VAROptions)
     ident = VARopt.ident
@@ -425,15 +455,26 @@ function VARhd(VAR::VARModel, VARopt::VAROptions)
     end
 
     # ---- exogenous ------------------------------------------------------
+    # v4.0 (compute_HD.m): the forcing term for exogenous variable ii sums
+    # over all its lags kk = 0..nlag_ex. X_EX (from VARmakelags) is laid out
+    # block-by-lag -- column kk*nvar_ex + ii is lag kk of variable ii -- and
+    # its coefficient sits at the same offset in F after the endogenous
+    # lags and deterministics. v3.1 read only the kk = 0 column.
+    nlag_ex = VAR.nlag_ex
+    base_ex = constant + nvarXeq
     HDexo = zeros(nvar, nobs + 1, max(nvar_ex, 1))
     if nvar_ex > 0
         for ii in 1:nvar_ex
             HDexo_big = zeros(nlag * nvar, nobs + 1)
-            VARexo = VAR.X_EX[:, ii]
-            EXOcol = zeros(nlag * nvar)
-            EXOcol[1:nvar] = F[:, nvar*nlag+constant+ii]
+            force = zeros(nvar, nobs)
+            for kk in 0:nlag_ex
+                col = kk * nvar_ex + ii
+                force += F[:, base_ex+col] * transpose(VAR.X_EX[:, col])
+            end
             for i in 2:(nobs+1)
-                HDexo_big[:, i] = EXOcol .* VARexo[i-1] + Fcomp * HDexo_big[:, i-1]
+                fvec = zeros(nlag * nvar)
+                fvec[1:nvar] = force[:, i-1]
+                HDexo_big[:, i] = fvec + Fcomp * HDexo_big[:, i-1]
                 HDexo[:, i, ii] = Icomp * HDexo_big[:, i]
             end
         end

@@ -81,6 +81,10 @@ Rows outside `window+1 … nobs-window` are `NaN`.
 function MovAvgCent(DATA, window::Integer)
     D = _movcheck(DATA, window)
     nobs, nvar = size(D)
+    # v4.0 guard: with nobs <= 2*window the loop below is empty and the
+    # result was silently all-NaN.
+    nobs < 2 * window + 1 && throw(ArgumentError(
+        "MovAvgCent: series too short -- need at least 2*window+1 observations."))
     OUT = fill(NaN, nobs, nvar)
     for jj in (window+1):(nobs-window)
         OUT[jj, :] = vec(nanmean(Matrix(D[(jj-window):(jj+window), :]), 1))
@@ -88,15 +92,23 @@ function MovAvgCent(DATA, window::Integer)
     return OUT
 end
 
-# Pearson correlation matrix, matching MATLAB's corrcoef (NaN propagates).
+# Pearson correlation matrix, matching MATLAB's corrcoef: a NaN anywhere in
+# column i or j makes C[i,j] NaN -- including the diagonal, which corrcoef
+# does NOT force to 1 (Julia's `cor(x, x)` short-circuits to 1.0).
 function _corrmat(X::AbstractMatrix)
     n = size(X, 2)
+    bad = [any(isnan, view(X, :, j)) for j in 1:n]
     C = Matrix{Float64}(undef, n, n)
     for i in 1:n, j in 1:n
-        C[i, j] = cor(view(X, :, i), view(X, :, j))
+        C[i, j] = (bad[i] || bad[j]) ? NaN : cor(view(X, :, i), view(X, :, j))
     end
     return C
 end
+
+# MATLAB's sum(M, 'omitnan') down the columns: an all-NaN column sums to 0,
+# unlike Auxiliary/nansum.m (and this package's `nansum`), which return NaN.
+_sum_omitnan(M::AbstractMatrix) =
+    [sum(v for v in col if !isnan(v); init = 0.0) for col in eachcol(M)]
 
 """
     MovCorr(X, window, i)
@@ -126,6 +138,8 @@ half-width here.
 """
 function MovCorrCent(X::AbstractMatrix, window::Integer, i::Integer)
     nobs, nvars = size(X)
+    nobs < 2 * window + 1 && throw(ArgumentError(
+        "MovCorrCent: series too short -- need at least 2*window+1 observations."))
     OUT = fill(NaN, nobs, nvars - 1)
     idx = setdiff(1:nvars, i)
     for tt in (window+1):(nobs-window)
@@ -208,19 +222,31 @@ both on levels and on log first differences.
 
 Returns `(nvar × 2)`: column 1 levels, column 2 log differences.
 
-!!! warning "Takes logs unconditionally"
-    `PairCorr.m` computes `log(X[2:end,:]) - log(X[1:end-1,:])` with no
-    check of sign, so any non-positive entry yields `NaN` (MATLAB) — a
-    complex number would be produced for negatives were it not for the
-    subsequent correlation. Only pass strictly positive levels. Replicated.
+!!! note "Non-positive levels (upstream v4.0 fix)"
+    The first-difference column is built from `log(X[2:end,:]) -
+    log(X[1:end-1,:])`. If any entry of `X` is `<= 0` a warning is issued
+    and the log differences are skipped (set to `NaN`) — the v4.0 behaviour
+    of `PairCorr.m`. VAR Toolbox 3.1 took the logs unguarded (complex
+    numbers for negatives, `-Inf` for zeros), and a literal Julia
+    translation would throw a `DomainError` on negatives. Note that v4.0
+    then reports `(0 - 1)/(n - 1)` in that column rather than `NaN`,
+    because its `sum(...,'omitnan')` of an all-NaN correlation matrix is
+    zero; this port reproduces that value (pinned against MATLAB v4.0).
 """
 function PairCorr(DATA::AbstractMatrix; absolute::Bool = false)
     X = Matrix{Float64}(DATA)
-    # Upstream blanks any column whose FIRST observation is NaN.
+    # v4.0 blanks any column containing a NaN (v3.1 tested only the first
+    # row). Numerically equivalent for the correlations -- corrcoef already
+    # propagates a column's NaN to all its pairs -- but explicit.
     for j in 1:size(X, 2)
-        isnan(X[1, j]) && (X[:, j] .= NaN)
+        any(isnan, view(X, :, j)) && (X[:, j] .= NaN)
     end
-    d = log.(X[2:end, :]) .- log.(X[1:(end-1), :])
+    if any(x -> x <= 0, X)
+        @warn "PairCorr: some data points are <= 0. First differences will not be computed."
+        d = fill(NaN, size(X, 1) - 1, size(X, 2))
+    else
+        d = log.(X[2:end, :]) .- log.(X[1:(end-1), :])
+    end
 
     X_corr = _corrmat(X)
     x_corr = _corrmat(d)
@@ -231,8 +257,12 @@ function PairCorr(DATA::AbstractMatrix; absolute::Bool = false)
     n = Float64.(vec(sum(.!nans, dims = 1)))
     n[n.==0] .= NaN
 
-    lvl = (vec(nansum(COR1, 1)) .- 1) ./ (n .- 1)
-    dif = (vec(nansum(COR2, 1)) .- 1) ./ (n .- 1)
+    # v4.0 replaced Auxiliary/nansum (NaN for an all-NaN column) with
+    # sum(...,'omitnan') (0 for an all-NaN column). Identical unless a whole
+    # column is NaN -- which is exactly the non-positive-levels case above,
+    # where the first-difference entry then comes out as (0-1)/(n-1).
+    lvl = (_sum_omitnan(COR1) .- 1) ./ (n .- 1)
+    dif = (_sum_omitnan(COR2) .- 1) ./ (n .- 1)
     return hcat(lvl, dif)
 end
 
